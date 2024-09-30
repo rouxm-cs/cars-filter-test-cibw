@@ -21,7 +21,14 @@
 
 import outlier_filter
 
-def test_filter(
-):
-    """Test on synthetic data."""
-    outlier_filter.pc_outlier_filtering()
+
+def test_synthetic():
+    """
+    Test outlier filtering on small synthetic data
+    """
+    synthetic_array = [
+        [10.2, 10.5, 10.4, 10.8, 10.9, 10.2, 10.3, 10.1],
+        [20.2, 20.5, 20.4, 20.8, 20.9, 20.2, 20.3, 20.1],
+        [30.2, 30.5, 30.4, 30.8, 30.9, 30.2, 30.3, 30.1],
+    ]
+    outlier_filter.pc_outlier_filtering(synthetic_array)
