@@ -60,8 +60,8 @@ def main(cloud_in):
 
     a = datetime.datetime.now()
     # mimic what is in outlier_removing_tools
-    cloud_tree = cKDTree(transposed_points)
-    k = 100
+    cloud_tree = cKDTree(transposed_points, leafsize=16)
+    k = 50
     neighbors_distances, _ = cloud_tree.query(transposed_points, k)
     mean_neighbors_distances = np.sum(neighbors_distances, axis=1)
     mean_neighbors_distances /= k

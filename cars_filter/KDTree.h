@@ -21,6 +21,7 @@
 #include <cmath>
 #include <numeric>
 #include <algorithm>
+#include <stack>
 
 // Debug headers
 #include <chrono>
@@ -113,12 +114,13 @@ public:
   // TODO better parameter handling ? Maybe create a Point Type
   // problem is that we use array of coords (x*N, y*N, z*N) and individual points
   // TODO Squared euclidian distance would be more efficient (but we need the true distance in filtering)
-  double euclidian_distance(double x1, double y1, double z1, double x2, double y2, double z2)
+  double euclidian_distance(double x1, double y1, double z1, double x2, double y2, double z2) const
   {
     return std::sqrt( (x1-x2)*(x1-x2) + (y1-y2)*(y1-y2) + (z1-z2)*(z1-z2)); 
   }
 
-  double euclidian_distance(double x, double y, double z, KDNode& node)
+
+  double euclidian_distance(double x, double y, double z, KDNode& node) const
   {
     return euclidian_distance(x,
                               y,
@@ -128,7 +130,17 @@ public:
                               m_point_cloud.m_z[node.m_idx]);
   }
 
-  double euclidian_distance(const PointType& point, const KDNode& node)
+  double euclidian_distance(const PointType& point1, const PointType& point2) const
+  {
+    return euclidian_distance(point1[0],
+                              point1[1],
+                              point1[2],
+                              point2[0],
+                              point2[1],
+                              point2[2]);
+  }
+
+  double euclidian_distance(const PointType& point, const KDNode& node) const
   {
     return euclidian_distance(point[0],
                               point[1],
@@ -159,6 +171,159 @@ public:
 
     return nearest_neighbor;
   }
+
+
+
+  NeighborNode findNNIterative(double x, double y, double z)
+  {
+    int number_of_iterations = 0;
+    PointType point = {x, y, z};
+    double distance = std::numeric_limits<double>::max();
+    NeighborNode nearest_neighbor = {nullptr, distance};
+
+    std::stack< std::pair<KDNode*, double> , std::vector< std::pair<KDNode*, double> > > node_queue;
+    node_queue.push({m_root_node, 0} );
+
+    while(!node_queue.empty())
+    {
+      auto [current_node, axis_distance] = node_queue.top();
+      node_queue.pop();
+
+      if (axis_distance >= nearest_neighbor.distance)
+      {
+        std::cout << "no need to go on the other side" << std::endl;
+        continue;
+      }
+
+      std::cout << "a better match might be on the other side !" << std::endl;
+
+      while (current_node)
+      {
+        number_of_iterations++;
+        auto current_idx = current_node->m_idx;
+        auto current_dimension = current_node->m_dimension;
+
+        // check if current node is a better match
+        auto current_distance = euclidian_distance(point, *current_node);
+        if (current_distance < nearest_neighbor.distance)
+        {
+          nearest_neighbor = {current_node, current_distance};
+        }
+
+        std::cout << "current node:" << current_idx << "[" << current_distance << "], best: " 
+                                    << nearest_neighbor.node->m_idx << "[" << nearest_neighbor.distance << "]" << std::endl; 
+
+        bool is_left = point[current_dimension] < m_point_cloud.m_coords[current_dimension][current_idx];
+        KDNode* next_node = is_left ? current_node->m_left_child : current_node->m_right_child;
+
+        double axis_distance = std::abs(point[current_dimension] - m_point_cloud.m_coords[current_dimension][current_idx]);
+
+        KDNode* other_node = is_left ? current_node->m_right_child : current_node->m_left_child;
+        node_queue.push({other_node, axis_distance});
+
+        current_node = next_node;
+
+      }
+    }
+
+    std::cout << "number of iteration:" << number_of_iterations << std::endl;
+
+    return nearest_neighbor;
+  }
+
+
+
+  std::vector<NeighborNode> findKNNIterative(double x, double y, double z, unsigned int k=1)
+  {
+    int number_of_iterations = 0;
+    PointType point = {x, y, z};
+
+    // Initialize the best matches container
+    KNeighborList k_nearest_neighbors;
+    for (unsigned int i=0; i<k; i++)
+    {
+      k_nearest_neighbors.emplace(nullptr, std::numeric_limits<double>::max());
+    }
+    double best_distance = std::numeric_limits<double>::max();
+
+    std::stack< std::pair<KDNode*, double> > node_queue;
+    node_queue.push({m_root_node, 0} );
+
+    while(!node_queue.empty())
+    {
+      auto [current_node, axis_distance] = node_queue.top();
+      node_queue.pop();
+
+      if (axis_distance >= best_distance)
+      {
+        //std::cout << "no need to go on the other side" << std::endl;
+        continue;
+      }
+
+      //std::cout << "a better match might be on the other side !" << std::endl;
+
+      while (current_node)
+      {
+
+        number_of_iterations++;
+        auto current_idx = current_node->m_idx;
+        auto current_dimension = current_node->m_dimension;
+
+        // check if current node is a better match
+        auto current_distance = euclidian_distance(point, *current_node);
+
+        if (current_distance < best_distance)
+        {
+          // remove the worst neighbor from the list
+          k_nearest_neighbors.pop();
+          // add the current node to the list
+          k_nearest_neighbors.emplace(current_node, current_distance);
+          best_distance = k_nearest_neighbors.top().distance;
+        }
+
+        //std::cout << "best distance " << best_distance << std::endl;
+        // std::cout << "current node:" << current_idx << "[" << current_distance << "], best: " 
+        //                             << k_nearest_neighbors.top().node->m_idx << "[" << k_nearest_neighbors.top().distance << "]" << std::endl; 
+
+        bool is_left = point[current_dimension] < m_point_cloud.m_coords[current_dimension][current_idx];
+        KDNode* next_node = is_left ? current_node->m_left_child : current_node->m_right_child;
+
+        double axis_distance = std::abs(point[current_dimension] - m_point_cloud.m_coords[current_dimension][current_idx]);
+
+        KDNode* other_node = is_left ? current_node->m_right_child : current_node->m_left_child;
+        node_queue.push({other_node, axis_distance});
+
+        current_node = next_node;
+
+      }
+    }
+
+    //std::cout << "number_of_iterations " << number_of_iterations << std::endl;
+
+    // convert priority queue to vector
+    std::vector<NeighborNode> output_neighbors;
+
+    for (unsigned int i=0; i<k; i++)
+    {
+      output_neighbors.push_back(k_nearest_neighbors.top());
+      k_nearest_neighbors.pop();
+    }
+
+    // for (const auto& elem: output_neighbors)
+    // {
+    //   auto idx = elem.node->m_idx;
+    //   std::cout << "neighbor:" << idx  << " "
+    //                             << m_point_cloud.m_x[idx] << " "
+    //                             << m_point_cloud.m_y[idx] << " "
+    //                             << m_point_cloud.m_z[idx] << " "
+    //                             << elem.distance << std::endl;
+    // }
+    // std::cout << "number of recursion in findNN: " << num_recur << std::endl;
+    return output_neighbors;
+  }
+
+
+
 
   std::vector<NeighborNode> findKNN(double x, double y, double z, unsigned int k=1)
   {

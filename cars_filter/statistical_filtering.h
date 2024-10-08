@@ -31,14 +31,16 @@ std::vector<unsigned int> statistical_filtering(double* x_coords,
   //tree.findNN(809438.52, 6304954.180000001, 55.53999999999999);
   //tree.findNN(809438.94, 6304941.72, 51.92999999999999);
   auto neighbor = tree.findNN(809438.94, 6304941.72, 50.92999999999999);
+  auto neighbor_iterative = tree.findNNIterative(809438.94, 6304941.72, 50.92999999999999);
 
   std::cout << "-----------------------------------------" << std::endl;
 
-  int k = 100;
+  int k = 50;
   double dev_factor = 1.;
 
   auto k_neighbors = tree.findKNN(809438.94, 6304941.72, 51.92999999999999, k);
 
+  auto k_neighbors_iterative = tree.findKNNIterative(809438.94, 6304941.72, 50.92999999999999, k);
   //tree.findNN(809438.52, 6304954.180000001, 55.53999999999999);
 
   std::vector<double> mean_distances;
@@ -56,6 +58,7 @@ std::vector<unsigned int> statistical_filtering(double* x_coords,
       acc += elem.distance;
     }
     mean_distances.push_back(acc/k);
+    //mean_distances.push_back(0);
   }
 
 
