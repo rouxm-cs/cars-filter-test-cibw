@@ -18,6 +18,9 @@
 
 #include <vector>
 #include "KDTree.h"
+#include "epipolar_utils.h"
+
+#include <chrono>
 
 std::vector<unsigned int> statistical_filtering(double* x_coords,
                                                 double* y_coords,
@@ -28,39 +31,40 @@ std::vector<unsigned int> statistical_filtering(double* x_coords,
 
   auto tree = KDTree(input_point_cloud);
 
-  //tree.findNN(809438.52, 6304954.180000001, 55.53999999999999);
-  //tree.findNN(809438.94, 6304941.72, 51.92999999999999);
-  auto neighbor = tree.findNN(809438.94, 6304941.72, 50.92999999999999);
-  auto neighbor_iterative = tree.findNNIterative(809438.94, 6304941.72, 50.92999999999999);
+  // //tree.findNN(809438.52, 6304954.180000001, 55.53999999999999);
+  // //tree.findNN(809438.94, 6304941.72, 51.92999999999999);
+  // auto neighbor = tree.findNN(809438.94, 6304941.72, 50.92999999999999);
+  // auto neighbor_iterative = tree.findNNIterative(809438.94, 6304941.72, 50.92999999999999);
 
-  std::cout << "-----------------------------------------" << std::endl;
+  // std::cout << "-----------------------------------------" << std::endl;
 
   int k = 50;
   double dev_factor = 1.;
 
-  auto k_neighbors = tree.findKNN(809438.94, 6304941.72, 51.92999999999999, k);
+  // auto k_neighbors = tree.findKNN(809438.94, 6304941.72, 51.92999999999999, k);
 
-  auto k_neighbors_iterative = tree.findKNNIterative(809438.94, 6304941.72, 50.92999999999999, k);
+  // auto k_neighbors_iterative = tree.findKNNIterative(809438.94, 6304941.72, 50.92999999999999, k);
   //tree.findNN(809438.52, 6304954.180000001, 55.53999999999999);
 
   std::vector<double> mean_distances;
   mean_distances.reserve(num_elem);
 
-  for (int i=0; i< input_point_cloud.size(); i++)
+  for (unsigned int i=0; i< input_point_cloud.size(); i++)
   {
-    auto k_neighbors = tree.findKNN(input_point_cloud.m_x[i], 
+    auto k_neighbors = tree.findKNNIterative(input_point_cloud.m_x[i], 
                  input_point_cloud.m_y[i],
                  input_point_cloud.m_z[i],
                  k);
     double acc =0;
     for (const auto& elem : k_neighbors)
     {
-      acc += elem.distance;
+      acc += std::sqrt(elem.distance);
     }
     mean_distances.push_back(acc/k);
     //mean_distances.push_back(0);
   }
 
+std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
 
   double dist_thresh;
 
@@ -110,5 +114,97 @@ std::vector<unsigned int> statistical_filtering(double* x_coords,
   // }
   // std::cout << std::endl;
 
+std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+std::cout << "Time difference = " << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << "[µs]" << std::endl;
   return result;
+}
+
+
+namespace cars_filter
+{
+
+
+void epipolar_statistical_filtering(Image<double>& x_coords,
+                                    Image<double>& y_coords,
+                                    Image<double>& z_coords,
+                                    Image<double>& outlier_array)
+{
+  unsigned k = 15;
+  unsigned half_window_size = 7;
+
+  InMemoryImage<double> mean_distance_image(x_coords.number_of_rows(), x_coords.number_of_cols());
+
+  for (unsigned int row=0; row < x_coords.number_of_rows(); row++)
+  {
+    for (unsigned int col=0; col < x_coords.number_of_cols(); col++)
+    {
+      //std::cout << row << " " << col << std::endl;
+      auto mean_dist = epipolar_knn(x_coords, y_coords, z_coords, row, col, k, half_window_size);
+      mean_distance_image.get(row, col) = mean_dist;
+    }
+  }
+
+  // mean with number of valid pixel counting
+  unsigned int num_valid = 0;
+  auto mean_lambda = [&num_valid](double acc, double input)
+  {
+    if (std::isnan(input))
+    {
+      return acc;
+    }
+    else
+    {
+      num_valid++;
+      return acc + input;
+    }
+  };
+
+
+  auto mean = std::accumulate(mean_distance_image.getData(), mean_distance_image.getData()+mean_distance_image.size(), 0.,mean_lambda );
+  mean/=num_valid;
+
+  std::cout << "mean " << mean << std::endl;
+
+
+  // variance
+  auto variance_lambda = [mean](double acc, double input)
+  {
+    if (std::isnan(input))
+    {
+      return acc;
+    }
+    else
+    {
+      return acc + (input - mean)*(input - mean);
+    }
+  };
+
+  const double var = std::accumulate(mean_distance_image.getData(), mean_distance_image.getData()+mean_distance_image.size(), 0.0, variance_lambda)/num_valid;
+  const double stddev = std::sqrt(var);
+
+  std::cout << "var " << var << std::endl;
+
+  const double dev_factor = 1;
+
+  const double distance_threshold = mean + dev_factor * stddev;
+
+  for (unsigned int row=0; row < x_coords.number_of_rows(); row++)
+  {
+    for (unsigned int col=0; col < x_coords.number_of_cols(); col++)
+    {
+      if (mean_distance_image.get(row, col) > distance_threshold)
+      {
+        outlier_array.get(row, col) = true;
+        x_coords.get(row, col) = std::numeric_limits<double>::quiet_NaN();
+        z_coords.get(row, col) = std::numeric_limits<double>::quiet_NaN();
+        z_coords.get(row, col) = std::numeric_limits<double>::quiet_NaN();
+
+      }
+    }
+  }
+
+
+
+}
+
 }

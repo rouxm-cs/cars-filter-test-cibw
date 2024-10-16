@@ -42,7 +42,7 @@ def main(cloud_in):
     print(f"points {points}")
 
     start_time = datetime.datetime.now()
-    result_cpp = outlier_filter.pc_outlier_filtering(points)
+    result_cpp = outlier_filter.pc_outlier_filtering(las.x, las.y, las.z)
     end_time = datetime.datetime.now()
     total_duration = end_time - start_time
 
