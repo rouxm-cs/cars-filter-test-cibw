@@ -67,11 +67,19 @@ public:
   unsigned int m_idx;
   // TODO: is that required in NN, or can we deduce it automatically
   unsigned int m_dimension;
+  unsigned int m_num_points;
+
+  std::vector<unsigned int> m_indices;
+
   KDNode* m_left_child;
   KDNode* m_right_child;
   KDNode* m_parent;
 
-  KDNode(unsigned int idx, unsigned int dimension): m_idx(idx), m_dimension(dimension), m_left_child(nullptr), m_right_child(nullptr), m_parent(nullptr)
+  KDNode(unsigned int idx, unsigned int dimension, unsigned int num_points): m_idx(idx), m_dimension(dimension), m_num_points(num_points), m_left_child(nullptr), m_right_child(nullptr), m_parent(nullptr)
+  {
+  };
+
+  KDNode(unsigned int idx, unsigned int dimension): m_idx(idx), m_dimension(dimension), m_num_points(1), m_left_child(nullptr), m_right_child(nullptr), m_parent(nullptr)
   {
   };
 };
@@ -95,15 +103,23 @@ inline bool operator< (const NeighborNode& lhs, const NeighborNode& rhs)
 
 
 
+template <class Container>
+class Adapter : public Container {
+public:
+    typedef typename Container::container_type container_type;
+    container_type &get_container() { return this->c; }
+};
+
+
+
 class KDTree
 {
 public:
   // typedef for a structure containing a node and its distance to a given point
   //using NeighborNode = std::pair<KDNode*, double>;
 
-
-
-  using KNeighborList = std::priority_queue<NeighborNode>;
+  using KNeighborListBase = std::priority_queue<NeighborNode>;
+  using KNeighborList = Adapter<KNeighborListBase>;
 
   KDTree(const PointCloud& point_cloud): m_point_cloud(point_cloud)
   {
@@ -114,23 +130,23 @@ public:
   // TODO better parameter handling ? Maybe create a Point Type
   // problem is that we use array of coords (x*N, y*N, z*N) and individual points
   // TODO Squared euclidian distance would be more efficient (but we need the true distance in filtering)
-  double euclidian_distance(double x1, double y1, double z1, double x2, double y2, double z2) const
+  inline double euclidian_distance(double x1, double y1, double z1, double x2, double y2, double z2) const
   {
-    return std::sqrt( (x1-x2)*(x1-x2) + (y1-y2)*(y1-y2) + (z1-z2)*(z1-z2)); 
+    return (x1-x2)*(x1-x2) + (y1-y2)*(y1-y2) + (z1-z2)*(z1-z2); 
   }
 
 
-  double euclidian_distance(double x, double y, double z, KDNode& node) const
+  inline double euclidian_distance(double x, double y, double z, KDNode& node) const
   {
     return euclidian_distance(x,
                               y,
                               z,
-                              m_point_cloud.m_x[node.m_idx],
-                              m_point_cloud.m_y[node.m_idx],
-                              m_point_cloud.m_z[node.m_idx]);
+                              m_point_cloud.m_coords[0][node.m_idx],
+                              m_point_cloud.m_coords[1][node.m_idx],
+                              m_point_cloud.m_coords[2][node.m_idx]);
   }
 
-  double euclidian_distance(const PointType& point1, const PointType& point2) const
+  inline double euclidian_distance(const PointType& point1, const PointType& point2) const
   {
     return euclidian_distance(point1[0],
                               point1[1],
@@ -140,7 +156,7 @@ public:
                               point2[2]);
   }
 
-  double euclidian_distance(const PointType& point, const KDNode& node) const
+  inline double euclidian_distance(const PointType& point, const KDNode& node) const
   {
     return euclidian_distance(point[0],
                               point[1],
@@ -181,7 +197,7 @@ public:
     double distance = std::numeric_limits<double>::max();
     NeighborNode nearest_neighbor = {nullptr, distance};
 
-    std::stack< std::pair<KDNode*, double> , std::vector< std::pair<KDNode*, double> > > node_queue;
+    std::stack< std::pair<KDNode*, double> > node_queue;
     node_queue.push({m_root_node, 0} );
 
     while(!node_queue.empty())
@@ -233,24 +249,62 @@ public:
 
 
 
-  std::vector<NeighborNode> findKNNIterative(double x, double y, double z, unsigned int k=1)
+  void processLeaf(const PointType& point, KDNode* node, double& best_distance, KNeighborList& k_nearest_neighbors, unsigned int k=1)
   {
+    //std::cout << "processLeaf !";
+    auto idx = node->m_idx;
+    auto size = node->m_num_points;
+
+    for (auto idx_it = node->m_indices.begin(); idx_it !=  node->m_indices.end(); idx_it++)
+    {
+      //std::cout << *idx_it;
+      PointType node_point = {m_point_cloud.m_x[*idx_it], 
+                              m_point_cloud.m_y[*idx_it], 
+                              m_point_cloud.m_z[*idx_it]};
+      // check if current node is a better match
+      auto current_distance = euclidian_distance(point, node_point);
+      //std::cout << current_distance << " ";
+      if (current_distance < best_distance)
+      {
+        // remove the worst neighbor from the list
+        if (k_nearest_neighbors.size() >= k)
+        {
+          k_nearest_neighbors.pop();
+        }
+
+        // add the current node to the list
+        k_nearest_neighbors.emplace(node, current_distance);
+        if (k_nearest_neighbors.size() >= k)
+        {
+          best_distance = k_nearest_neighbors.top().distance;
+        }
+
+      }
+    }
+    //std::cout << " best distance: " << best_distance <<  std::endl;
+  }
+
+
+  std::vector<NeighborNode> findKNNIterative(double x, double y, double z, unsigned int k=1)
+  {//std::cout << "KNN iterative" << std::endl;
     int number_of_iterations = 0;
     PointType point = {x, y, z};
 
     // Initialize the best matches container
     KNeighborList k_nearest_neighbors;
-    for (unsigned int i=0; i<k; i++)
-    {
-      k_nearest_neighbors.emplace(nullptr, std::numeric_limits<double>::max());
-    }
+    k_nearest_neighbors.get_container().reserve(k);
+    // for (unsigned int i=0; i<k; i++)
+    // {
+    //   k_nearest_neighbors.emplace(nullptr, std::numeric_limits<double>::max());
+    // }
     double best_distance = std::numeric_limits<double>::max();
 
-    std::stack< std::pair<KDNode*, double> > node_queue;
+    std::stack< std::pair<KDNode*, double> , std::vector<std::pair<KDNode*, double> > > node_queue;
     node_queue.push({m_root_node, 0} );
 
     while(!node_queue.empty())
-    {
+    { 
+      //std::cout << "new branch" << std::endl;
       auto [current_node, axis_distance] = node_queue.top();
       node_queue.pop();
 
@@ -264,8 +318,13 @@ public:
 
       while (current_node)
       {
-
-        number_of_iterations++;
+        if (current_node->m_num_points>1)
+        {
+          //std::cout << "process leaf" << std::endl;
+          processLeaf(point, current_node, best_distance, k_nearest_neighbors, k);
+          break;
+        }
+//std::cout << "next node" << std::endl;
         auto current_idx = current_node->m_idx;
         auto current_dimension = current_node->m_dimension;
 
@@ -275,10 +334,16 @@ public:
         if (current_distance < best_distance)
         {
           // remove the worst neighbor from the list
-          k_nearest_neighbors.pop();
+          if (k_nearest_neighbors.size() >= k)
+          {
+            k_nearest_neighbors.pop();
+          }
           // add the current node to the list
           k_nearest_neighbors.emplace(current_node, current_distance);
+          if (k_nearest_neighbors.size() >= k)
+          {
           best_distance = k_nearest_neighbors.top().distance;
+          }
         }
 
         //std::cout << "best distance " << best_distance << std::endl;
@@ -288,18 +353,18 @@ public:
         bool is_left = point[current_dimension] < m_point_cloud.m_coords[current_dimension][current_idx];
         KDNode* next_node = is_left ? current_node->m_left_child : current_node->m_right_child;
 
-        double axis_distance = std::abs(point[current_dimension] - m_point_cloud.m_coords[current_dimension][current_idx]);
+        double axis_distance = point[current_dimension] - m_point_cloud.m_coords[current_dimension][current_idx];
 
         KDNode* other_node = is_left ? current_node->m_right_child : current_node->m_left_child;
-        node_queue.push({other_node, axis_distance});
 
+        node_queue.push({other_node, axis_distance*axis_distance});
         current_node = next_node;
 
       }
     }
 
-    //std::cout << "number_of_iterations " << number_of_iterations << std::endl;
-
+    return k_nearest_neighbors.get_container();
+#if 0
     // convert priority queue to vector
     std::vector<NeighborNode> output_neighbors;
 
@@ -319,7 +384,10 @@ public:
     //                             << elem.distance << std::endl;
     // }
     // std::cout << "number of recursion in findNN: " << num_recur << std::endl;
+
+    //std::cout << "KNN iterative done" << std::endl;
     return output_neighbors;
+#endif
   }
 
 
@@ -398,6 +466,24 @@ private:
     {
       return nullptr;
     }
+
+    if (number_of_points <= 16)
+    {
+      //std::cout << "creating leaf node" << std::endl;
+      KDNode node(*start_idx_it, current_dimension, number_of_points);
+
+      node.m_indices.reserve(number_of_points);
+      for (auto it = start_idx_it; it<start_idx_it+number_of_points; it++ )
+      {
+        node.m_indices.push_back(*it);
+      }
+
+      node.m_parent = root_node;
+
+      m_nodes.push_back(node);
+      return &m_nodes.back();
+    }
+
 
     auto median_pos= static_cast<unsigned int>(number_of_points/2);
 
