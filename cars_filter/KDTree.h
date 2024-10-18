@@ -121,7 +121,7 @@ public:
   using KNeighborListBase = std::priority_queue<NeighborNode>;
   using KNeighborList = Adapter<KNeighborListBase>;
 
-  KDTree(const PointCloud& point_cloud): m_point_cloud(point_cloud)
+  KDTree(const PointCloud& point_cloud, unsigned int leaf_size = 1): m_point_cloud(point_cloud), m_leaf_size(leaf_size)
   {
     m_nodes.reserve(point_cloud.size());
     m_root_node = build_tree();
@@ -165,6 +165,12 @@ public:
                               m_point_cloud.m_y[node.m_idx],
                               m_point_cloud.m_z[node.m_idx]);
   }
+
+  const std::vector<KDNode>& getNodes() const
+  {
+    return m_nodes;
+  }
+
 
   NeighborNode findNN(double x, double y, double z)
   {
@@ -251,10 +257,6 @@ public:
 
   void processLeaf(const PointType& point, KDNode* node, double& best_distance, KNeighborList& k_nearest_neighbors, unsigned int k=1)
   {
-    //std::cout << "processLeaf !";
-    auto idx = node->m_idx;
-    auto size = node->m_num_points;
-
     for (auto idx_it = node->m_indices.begin(); idx_it !=  node->m_indices.end(); idx_it++)
     {
       //std::cout << *idx_it;
@@ -281,50 +283,114 @@ public:
 
       }
     }
-    //std::cout << " best distance: " << best_distance <<  std::endl;
+  }
+
+  void processLeafBall(const PointType& point, KDNode* node, std::vector<unsigned int>& neighbors, double squared_radius)
+  {
+    for (auto idx_it = node->m_indices.begin(); idx_it !=  node->m_indices.end(); idx_it++)
+    {
+      PointType node_point = {m_point_cloud.m_x[*idx_it], 
+                              m_point_cloud.m_y[*idx_it], 
+                              m_point_cloud.m_z[*idx_it]};
+      // check if current node is in the ball around the point
+      if (euclidian_distance(point, node_point) < squared_radius)
+      {
+        //std::cout << euclidian_distance(point, node_point) << " " << *idx_it << " " << squared_radius << std::endl;
+        neighbors.push_back(*idx_it);
+      }
+
+    }
+  }
+
+  std::vector<unsigned int> epipolar_neighbors_in_ball(double x, double y, double z, double radius)
+  {
+    PointType point = {x, y, z};
+    const double squared_radius = radius * radius;
+
+    std::vector<unsigned int> neighbors;
+
+
+    std::stack<KDNode*> node_queue;
+    node_queue.push(m_root_node );
+
+    while(!node_queue.empty())
+    {
+      auto current_node = node_queue.top();
+      node_queue.pop();
+
+
+      while (current_node)
+      {
+        if (current_node->m_num_points>1)
+        {
+          processLeafBall(point, current_node, neighbors, squared_radius);
+          break;
+        }
+
+        auto current_idx = current_node->m_idx;
+        auto current_dimension = current_node->m_dimension;
+
+        bool is_left = point[current_dimension] < m_point_cloud.m_coords[current_dimension][current_idx];
+        KDNode* next_node = is_left ? current_node->m_left_child : current_node->m_right_child;
+
+        if (euclidian_distance(point, *current_node) < squared_radius)
+        {
+          //std::cout << euclidian_distance(point, *current_node) << " " << current_node->m_idx << " " << squared_radius << std::endl;
+          neighbors.push_back(current_node->m_idx);
+        }
+
+        double axis_distance = std::abs(point[current_dimension] - m_point_cloud.m_coords[current_dimension][current_idx]);
+
+        if(axis_distance < radius)
+        {
+          KDNode* other_node = is_left ? current_node->m_right_child : current_node->m_left_child;
+          node_queue.push(other_node);
+        }
+        current_node = next_node;
+      }
+    }
+    return neighbors;
   }
 
 
   std::vector<NeighborNode> findKNNIterative(double x, double y, double z, unsigned int k=1)
-  {//std::cout << "KNN iterative" << std::endl;
-    int number_of_iterations = 0;
+  {
     PointType point = {x, y, z};
 
-    // Initialize the best matches container
+    // Initialize the best matches container. Note that is empty at the 
+    // beginning of the algorithm and is filled with neighbors until reaching k
+    // elements
     KNeighborList k_nearest_neighbors;
     k_nearest_neighbors.get_container().reserve(k);
-    // for (unsigned int i=0; i<k; i++)
-    // {
-    //   k_nearest_neighbors.emplace(nullptr, std::numeric_limits<double>::max());
-    // }
+
     double best_distance = std::numeric_limits<double>::max();
 
     std::stack< std::pair<KDNode*, double> , std::vector<std::pair<KDNode*, double> > > node_queue;
     node_queue.push({m_root_node, 0} );
 
     while(!node_queue.empty())
-    { 
-      //std::cout << "new branch" << std::endl;
+    {
       auto [current_node, axis_distance] = node_queue.top();
       node_queue.pop();
 
+      // Do we have to look at this side of the tree ?
       if (axis_distance >= best_distance)
       {
-        //std::cout << "no need to go on the other side" << std::endl;
         continue;
       }
 
-      //std::cout << "a better match might be on the other side !" << std::endl;
-
       while (current_node)
       {
+        // We arrived at a leaf, if it contains a single point, process as usual
+        // If it contains several point, we use brute force to compute all 
+        // distances in the leaf. This optimization helps reducing the number of
+        // branchs in the tree, and is adapted from scipy ckdtree implementation.
         if (current_node->m_num_points>1)
         {
-          //std::cout << "process leaf" << std::endl;
           processLeaf(point, current_node, best_distance, k_nearest_neighbors, k);
           break;
         }
-//std::cout << "next node" << std::endl;
+
         auto current_idx = current_node->m_idx;
         auto current_dimension = current_node->m_dimension;
 
@@ -346,48 +412,27 @@ public:
           }
         }
 
-        //std::cout << "best distance " << best_distance << std::endl;
-        // std::cout << "current node:" << current_idx << "[" << current_distance << "], best: " 
-        //                             << k_nearest_neighbors.top().node->m_idx << "[" << k_nearest_neighbors.top().distance << "]" << std::endl; 
-
+        // Find on which side of the tree the point of interest is
         bool is_left = point[current_dimension] < m_point_cloud.m_coords[current_dimension][current_idx];
+        
         KDNode* next_node = is_left ? current_node->m_left_child : current_node->m_right_child;
 
         double axis_distance = point[current_dimension] - m_point_cloud.m_coords[current_dimension][current_idx];
 
         KDNode* other_node = is_left ? current_node->m_right_child : current_node->m_left_child;
 
+        // Add the node on the other side of tree to the stack of node to be 
+        // processed. The check verifying that neighbors can actually be on
+        // this side is done at the beginning of the loop, to avoid false 
+        // negatives in case a smaller distance is found in this branch
         node_queue.push({other_node, axis_distance*axis_distance});
-        current_node = next_node;
 
+        // Go to next node on this branch
+        current_node = next_node;
       }
     }
 
     return k_nearest_neighbors.get_container();
-#if 0
-    // convert priority queue to vector
-    std::vector<NeighborNode> output_neighbors;
-
-    for (unsigned int i=0; i<k; i++)
-    {
-      output_neighbors.push_back(k_nearest_neighbors.top());
-      k_nearest_neighbors.pop();
-    }
-
-    // for (const auto& elem: output_neighbors)
-    // {
-    //   auto idx = elem.node->m_idx;
-    //   std::cout << "neighbor:" << idx  << " "
-    //                             << m_point_cloud.m_x[idx] << " "
-    //                             << m_point_cloud.m_y[idx] << " "
-    //                             << m_point_cloud.m_z[idx] << " "
-    //                             << elem.distance << std::endl;
-    // }
-    // std::cout << "number of recursion in findNN: " << num_recur << std::endl;
-
-    //std::cout << "KNN iterative done" << std::endl;
-    return output_neighbors;
-#endif
   }
 
 
@@ -415,17 +460,6 @@ public:
       output_neighbors.push_back(k_nearest_neighbors.top());
       k_nearest_neighbors.pop();
     }
-
-    // for (const auto& elem: output_neighbors)
-    // {
-    //   auto idx = elem.node->m_idx;
-    //   std::cout << "neighbor:" << idx  << " "
-    //                             << m_point_cloud.m_x[idx] << " "
-    //                             << m_point_cloud.m_y[idx] << " "
-    //                             << m_point_cloud.m_z[idx] << " "
-    //                             << elem.distance << std::endl;
-    // }
-    // std::cout << "number of recursion in findNN: " << num_recur << std::endl;
     return output_neighbors;
   }
 
@@ -447,11 +481,6 @@ private:
     std::cout << "Tree build time" << std::chrono::duration_cast<std::chrono::milliseconds>(end_time - begin_time).count() << "ms" << std::endl;
     std::cout << "number of nodes " << m_nodes.size() << std::endl;
 
-    // for (const auto& elem: m_nodes)
-    // {
-    //   std::cout << elem.m_idx << std::endl;
-    // }
-
     return root_node;
   }
 
@@ -467,7 +496,7 @@ private:
       return nullptr;
     }
 
-    if (number_of_points <= 16)
+    if (number_of_points <= m_leaf_size)
     {
       //std::cout << "creating leaf node" << std::endl;
       KDNode node(*start_idx_it, current_dimension, number_of_points);
@@ -541,8 +570,6 @@ private:
       best_match = {node, current_distance};
     }
 
-    std::cout << "current distance " << current_distance << " " << best_match.distance << std::endl;
-
     // Check we need to search for point in the other side of this node
     double axis_distance = std::abs(point[current_dimension] - m_point_cloud.m_coords[current_dimension][current_idx]);
 
@@ -606,6 +633,8 @@ private:
   PointCloud m_point_cloud;
   std::vector<KDNode> m_nodes;
   KDNode* m_root_node;
+
+  unsigned int m_leaf_size;
 };
 
 

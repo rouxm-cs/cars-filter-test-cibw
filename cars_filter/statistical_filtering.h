@@ -25,26 +25,13 @@
 std::vector<unsigned int> statistical_filtering(double* x_coords,
                                                 double* y_coords,
                                                 double* z_coords,
-                                                unsigned int num_elem)
+                                                unsigned int num_elem,
+                                                const double dev_factor = 1.,
+                                                const unsigned int k = 50)
 {
   auto input_point_cloud = PointCloud(x_coords, y_coords, z_coords, num_elem);
 
-  auto tree = KDTree(input_point_cloud);
-
-  // //tree.findNN(809438.52, 6304954.180000001, 55.53999999999999);
-  // //tree.findNN(809438.94, 6304941.72, 51.92999999999999);
-  // auto neighbor = tree.findNN(809438.94, 6304941.72, 50.92999999999999);
-  // auto neighbor_iterative = tree.findNNIterative(809438.94, 6304941.72, 50.92999999999999);
-
-  // std::cout << "-----------------------------------------" << std::endl;
-
-  int k = 50;
-  double dev_factor = 1.;
-
-  // auto k_neighbors = tree.findKNN(809438.94, 6304941.72, 51.92999999999999, k);
-
-  // auto k_neighbors_iterative = tree.findKNNIterative(809438.94, 6304941.72, 50.92999999999999, k);
-  //tree.findNN(809438.52, 6304954.180000001, 55.53999999999999);
+  auto tree = KDTree(input_point_cloud, 16);
 
   std::vector<double> mean_distances;
   mean_distances.reserve(num_elem);

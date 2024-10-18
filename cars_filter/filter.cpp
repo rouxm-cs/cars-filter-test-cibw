@@ -86,12 +86,14 @@ py::array_t<double, py::array::c_style> pyEpipolarOutlierFiltering(
 }
 
 
-py::list pyOutlierFiltering(py::array_t<double,
+py::list pyPointCloudStatisticalOutlierFiltering(py::array_t<double,
           py::array::c_style | py::array::forcecast> x_array,
           py::array_t<double,
           py::array::c_style | py::array::forcecast> y_array,
           py::array_t<double,
-          py::array::c_style | py::array::forcecast> z_array)
+          py::array::c_style | py::array::forcecast> z_array,
+          const double dev_factor,
+          const unsigned int k)
 {
   /* Request a buffer descriptor from Python */
   py::buffer_info x_info = x_array.request();
@@ -103,6 +105,58 @@ py::list pyOutlierFiltering(py::array_t<double,
   py::buffer_info z_info = z_array.request();
   auto z_coords = static_cast<double *>(z_info.ptr);
 
+  auto result = statistical_filtering(x_coords, y_coords, z_coords, x_info.shape[0], dev_factor, k);
+
+  // Copy C++ vector to Python list
+  // As result has variable length, I am not sure if the copy can be avoided here in pyBind
+  return py::cast(result);
+}
+
+
+py::list pyPointCloudSmallComponentsOutlierFiltering(py::array_t<double,
+          py::array::c_style | py::array::forcecast> x_array,
+          py::array_t<double,
+          py::array::c_style | py::array::forcecast> y_array,
+          py::array_t<double,
+          py::array::c_style | py::array::forcecast> z_array,
+          const double radius = 3,
+          const unsigned int min_cluster_size = 15)
+{
+  /* Request a buffer descriptor from Python */
+  py::buffer_info x_info = x_array.request();
+  auto x_coords = static_cast<double *>(x_info.ptr);
+
+  py::buffer_info y_info = y_array.request();
+  auto y_coords = static_cast<double *>(y_info.ptr);
+
+  py::buffer_info z_info = z_array.request();
+  auto z_coords = static_cast<double *>(z_info.ptr);
+
+  auto result = cars_filter::point_cloud_small_components_filtering_v2(x_coords, y_coords, z_coords, x_info.shape[0], radius, min_cluster_size);
+
+  // Copy C++ vector to Python list
+  // As result has variable length, I am not sure if the copy can be avoided here in pyBind
+  return py::cast(result);
+}
+
+
+py::list pyOutlierFiltering(py::array_t<double,
+          py::array::c_style | py::array::forcecast> x_array,
+          py::array_t<double,
+          py::array::c_style | py::array::forcecast> y_array,
+          py::array_t<double,
+          py::array::c_style | py::array::forcecast> z_array,
+          const std::string& method)
+{
+  /* Request a buffer descriptor from Python */
+  py::buffer_info x_info = x_array.request();
+  auto x_coords = static_cast<double *>(x_info.ptr);
+
+  py::buffer_info y_info = y_array.request();
+  auto y_coords = static_cast<double *>(y_info.ptr);
+
+  py::buffer_info z_info = z_array.request();
+  auto z_coords = static_cast<double *>(z_info.ptr);
 
   // TODO: remove debug info
   std::cout << "info.itemsize " << x_info.itemsize << std::endl;
@@ -118,8 +172,15 @@ py::list pyOutlierFiltering(py::array_t<double,
     std::cout << "strides " << elem << std::endl;
   }
 
-
-  auto result = statistical_filtering(x_coords, y_coords, z_coords, x_info.shape[0]);
+  std::vector<unsigned int> result;
+  if (method == "statistical_filtering")
+  {
+    result = statistical_filtering(x_coords, y_coords, z_coords, x_info.shape[0]);
+  }
+  else if (method == "small_components_filtering")
+  {
+    result = cars_filter::point_cloud_small_components_filtering_v2(x_coords, y_coords, z_coords, x_info.shape[0]);
+  }
 
   // Copy C++ vector to Python list
   // As result has variable length, I am not sure if the copy can be avoided here in pyBind
@@ -128,17 +189,12 @@ py::list pyOutlierFiltering(py::array_t<double,
 
 
 
-py::list pyCopyBug(py::array_t<int> points)
-{
-
-}
-
-
 // wrap as Python module
 PYBIND11_MODULE(outlier_filter, m)
 {
   m.doc() = "filter";
   m.def("pc_outlier_filtering", &pyOutlierFiltering, "Filter outliers from point cloud");
+  m.def("pc_small_components_outlier_filtering", &pyPointCloudSmallComponentsOutlierFiltering, "Filter outliers from point cloud using statistical method");
+  m.def("pc_statistical_outlier_filtering", &pyPointCloudStatisticalOutlierFiltering, "Filter outliers from point cloud using small components method");
   m.def("epipolar_outlier_filtering", &pyEpipolarOutlierFiltering, "Filter outliers from point cloud");
-  m.def("copy bug", &pyCopyBug, "Filter outliers from point cloud");
 }
