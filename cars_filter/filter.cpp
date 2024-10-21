@@ -64,9 +64,6 @@ py::array_t<double, py::array::c_style> pyEpipolarOutlierFiltering(
   auto z_image = pyarray_to_image<double>(z_values);
 
   // // Create a Python object
-  //py::array_t<double, py::array::c_style> outlier_array(x_image.size());
-  std::vector<int> dimensions = {x_image.number_of_rows(),  x_image.number_of_cols()};
-  std::vector<int> strides = {6520,  8};
   py::array_t<double, py::array::c_style> outlier_array({x_image.number_of_rows(),  x_image.number_of_cols()},
                                                         {6520,  8});
   auto outlier_image = pyarray_to_image<double>(outlier_array);

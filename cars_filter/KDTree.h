@@ -67,19 +67,13 @@ public:
   unsigned int m_idx;
   // TODO: is that required in NN, or can we deduce it automatically
   unsigned int m_dimension;
-  unsigned int m_num_points;
 
   std::vector<unsigned int> m_indices;
 
   KDNode* m_left_child;
   KDNode* m_right_child;
-  KDNode* m_parent;
 
-  KDNode(unsigned int idx, unsigned int dimension, unsigned int num_points): m_idx(idx), m_dimension(dimension), m_num_points(num_points), m_left_child(nullptr), m_right_child(nullptr), m_parent(nullptr)
-  {
-  };
-
-  KDNode(unsigned int idx, unsigned int dimension): m_idx(idx), m_dimension(dimension), m_num_points(1), m_left_child(nullptr), m_right_child(nullptr), m_parent(nullptr)
+  KDNode(unsigned int idx, unsigned int dimension): m_idx(idx), m_dimension(dimension), m_left_child(nullptr), m_right_child(nullptr)
   {
   };
 };
@@ -102,6 +96,10 @@ inline bool operator< (const NeighborNode& lhs, const NeighborNode& rhs)
 }
 
 
+inline bool operator> (const NeighborNode& lhs, const NeighborNode& rhs) 
+{
+  return lhs.distance > rhs.distance;
+}
 
 template <class Container>
 class Adapter : public Container {
@@ -125,20 +123,23 @@ public:
   {
     m_nodes.reserve(point_cloud.size());
     m_root_node = build_tree();
+
+    m_x = m_point_cloud.m_coords[0];
+    m_y = m_point_cloud.m_coords[1];
+    m_z = m_point_cloud.m_coords[2];
   }
 
-  // TODO better parameter handling ? Maybe create a Point Type
-  // problem is that we use array of coords (x*N, y*N, z*N) and individual points
-  // TODO Squared euclidian distance would be more efficient (but we need the true distance in filtering)
-  inline double euclidian_distance(double x1, double y1, double z1, double x2, double y2, double z2) const
+  inline double squared_euclidian_distance(const double x1, const double y1, const double z1, const double x2, const double y2, const double z2) const
   {
-    return (x1-x2)*(x1-x2) + (y1-y2)*(y1-y2) + (z1-z2)*(z1-z2); 
+    const double dx = x1-x2;
+    const double dy = y1-y2;
+    const double dz = z1-z2;
+    return dx * dx + dy * dy + dz * dz; 
   }
 
-
-  inline double euclidian_distance(double x, double y, double z, KDNode& node) const
+  inline double squared_euclidian_distance(double x, double y, double z, KDNode& node) const
   {
-    return euclidian_distance(x,
+    return squared_euclidian_distance(x,
                               y,
                               z,
                               m_point_cloud.m_coords[0][node.m_idx],
@@ -146,9 +147,9 @@ public:
                               m_point_cloud.m_coords[2][node.m_idx]);
   }
 
-  inline double euclidian_distance(const PointType& point1, const PointType& point2) const
+  inline double squared_euclidian_distance(const PointType& point1, const PointType& point2) const
   {
-    return euclidian_distance(point1[0],
+    return squared_euclidian_distance(point1[0],
                               point1[1],
                               point1[2],
                               point2[0],
@@ -156,14 +157,22 @@ public:
                               point2[2]);
   }
 
-  inline double euclidian_distance(const PointType& point, const KDNode& node) const
+  inline double squared_euclidian_distance(const PointType& point, const KDNode& node) const
   {
-    return euclidian_distance(point[0],
-                              point[1],
-                              point[2],
-                              m_point_cloud.m_x[node.m_idx],
-                              m_point_cloud.m_y[node.m_idx],
-                              m_point_cloud.m_z[node.m_idx]);
+    const double dx = point[0] - m_point_cloud.m_x[node.m_idx];
+    const double dy = point[1] - m_point_cloud.m_y[node.m_idx];
+    const double dz = point[2] - m_point_cloud.m_z[node.m_idx];
+
+    return dx * dx + dy * dy + dz * dz;
+  }
+
+  inline double squared_euclidian_distance(const PointType& point, const unsigned int idx) const
+  {
+    const double dx = point[0] - m_x[idx];
+    const double dy = point[1] - m_y[idx];
+    const double dz = point[2] - m_z[idx];
+
+    return dx * dx + dy * dy + dz * dz;
   }
 
   const std::vector<KDNode>& getNodes() const
@@ -226,7 +235,7 @@ public:
         auto current_dimension = current_node->m_dimension;
 
         // check if current node is a better match
-        auto current_distance = euclidian_distance(point, *current_node);
+        auto current_distance = squared_euclidian_distance(point, *current_node);
         if (current_distance < nearest_neighbor.distance)
         {
           nearest_neighbor = {current_node, current_distance};
@@ -255,28 +264,24 @@ public:
 
 
 
-  void processLeaf(const PointType& point, KDNode* node, double& best_distance, KNeighborList& k_nearest_neighbors, unsigned int k=1)
+  inline void processLeaf(const PointType& point, KDNode* node, double& best_distance, KNeighborList& k_nearest_neighbors, const unsigned int k=1)
   {
     for (auto idx_it = node->m_indices.begin(); idx_it !=  node->m_indices.end(); idx_it++)
     {
-      //std::cout << *idx_it;
-      PointType node_point = {m_point_cloud.m_x[*idx_it], 
-                              m_point_cloud.m_y[*idx_it], 
-                              m_point_cloud.m_z[*idx_it]};
       // check if current node is a better match
-      auto current_distance = euclidian_distance(point, node_point);
+      auto current_distance = squared_euclidian_distance(point, *idx_it);
       //std::cout << current_distance << " ";
       if (current_distance < best_distance)
       {
         // remove the worst neighbor from the list
-        if (k_nearest_neighbors.size() >= k)
+        if (k_nearest_neighbors.size() == k)
         {
           k_nearest_neighbors.pop();
         }
 
         // add the current node to the list
         k_nearest_neighbors.emplace(node, current_distance);
-        if (k_nearest_neighbors.size() >= k)
+        if (k_nearest_neighbors.size() == k)
         {
           best_distance = k_nearest_neighbors.top().distance;
         }
@@ -293,9 +298,9 @@ public:
                               m_point_cloud.m_y[*idx_it], 
                               m_point_cloud.m_z[*idx_it]};
       // check if current node is in the ball around the point
-      if (euclidian_distance(point, node_point) < squared_radius)
+      if (squared_euclidian_distance(point, node_point) < squared_radius)
       {
-        //std::cout << euclidian_distance(point, node_point) << " " << *idx_it << " " << squared_radius << std::endl;
+        //std::cout << squared_euclidian_distance(point, node_point) << " " << *idx_it << " " << squared_radius << std::endl;
         neighbors.push_back(*idx_it);
       }
 
@@ -321,7 +326,7 @@ public:
 
       while (current_node)
       {
-        if (current_node->m_num_points>1)
+        if (!current_node->m_indices.empty())
         {
           processLeafBall(point, current_node, neighbors, squared_radius);
           break;
@@ -333,9 +338,9 @@ public:
         bool is_left = point[current_dimension] < m_point_cloud.m_coords[current_dimension][current_idx];
         KDNode* next_node = is_left ? current_node->m_left_child : current_node->m_right_child;
 
-        if (euclidian_distance(point, *current_node) < squared_radius)
+        if (squared_euclidian_distance(point, *current_node) < squared_radius)
         {
-          //std::cout << euclidian_distance(point, *current_node) << " " << current_node->m_idx << " " << squared_radius << std::endl;
+          //std::cout << squared_euclidian_distance(point, *current_node) << " " << current_node->m_idx << " " << squared_radius << std::endl;
           neighbors.push_back(current_node->m_idx);
         }
 
@@ -353,10 +358,8 @@ public:
   }
 
 
-  std::vector<NeighborNode> findKNNIterative(double x, double y, double z, unsigned int k=1)
+  std::vector<NeighborNode> findKNNIterative(const PointType& point, unsigned int k=1)
   {
-    PointType point = {x, y, z};
-
     // Initialize the best matches container. Note that is empty at the 
     // beginning of the algorithm and is filled with neighbors until reaching k
     // elements
@@ -365,16 +368,19 @@ public:
 
     double best_distance = std::numeric_limits<double>::max();
 
-    std::stack< std::pair<KDNode*, double> , std::vector<std::pair<KDNode*, double> > > node_queue;
-    node_queue.push({m_root_node, 0} );
+    Adapter<std::priority_queue< NeighborNode , std::vector<NeighborNode>, std::greater<NeighborNode> >> node_queue;
+    node_queue.get_container().reserve(100);
+    node_queue.emplace(m_root_node, 0);
 
     while(!node_queue.empty())
     {
-      auto [current_node, axis_distance] = node_queue.top();
+      const auto current_neighbor = node_queue.top();
+      auto current_node = current_neighbor.node;
+      const auto current_axis_distance = current_neighbor.distance;
       node_queue.pop();
 
       // Do we have to look at this side of the tree ?
-      if (axis_distance >= best_distance)
+      if (current_axis_distance >= best_distance)
       {
         continue;
       }
@@ -385,53 +391,51 @@ public:
         // If it contains several point, we use brute force to compute all 
         // distances in the leaf. This optimization helps reducing the number of
         // branchs in the tree, and is adapted from scipy ckdtree implementation.
-        if (current_node->m_num_points>1)
+        if (!current_node->m_indices.empty())
         {
           processLeaf(point, current_node, best_distance, k_nearest_neighbors, k);
           break;
         }
 
-        auto current_idx = current_node->m_idx;
-        auto current_dimension = current_node->m_dimension;
+        const auto current_idx = current_node->m_idx;
+        const auto current_dimension = current_node->m_dimension;
 
         // check if current node is a better match
-        auto current_distance = euclidian_distance(point, *current_node);
+        auto current_distance = squared_euclidian_distance(point, current_node->m_idx);
 
         if (current_distance < best_distance)
         {
           // remove the worst neighbor from the list
-          if (k_nearest_neighbors.size() >= k)
+          if (k_nearest_neighbors.size() == k)
           {
             k_nearest_neighbors.pop();
           }
           // add the current node to the list
           k_nearest_neighbors.emplace(current_node, current_distance);
-          if (k_nearest_neighbors.size() >= k)
+          if (k_nearest_neighbors.size() == k)
           {
-          best_distance = k_nearest_neighbors.top().distance;
+            best_distance = k_nearest_neighbors.top().distance;
           }
         }
 
         // Find on which side of the tree the point of interest is
-        bool is_left = point[current_dimension] < m_point_cloud.m_coords[current_dimension][current_idx];
-        
-        KDNode* next_node = is_left ? current_node->m_left_child : current_node->m_right_child;
-
-        double axis_distance = point[current_dimension] - m_point_cloud.m_coords[current_dimension][current_idx];
-
-        KDNode* other_node = is_left ? current_node->m_right_child : current_node->m_left_child;
+        const double axis_distance = point[current_dimension] - m_point_cloud.m_coords[current_dimension][current_idx];
+        const bool is_left = axis_distance < 0;
+        const double squared_axis_distance = axis_distance*axis_distance;
+        KDNode* other_branch_node = is_left ? current_node->m_right_child : current_node->m_left_child;
 
         // Add the node on the other side of tree to the stack of node to be 
         // processed. The check verifying that neighbors can actually be on
-        // this side is done at the beginning of the loop, to avoid false 
+        // this side is also done at the beginning of the loop, to avoid false 
         // negatives in case a smaller distance is found in this branch
-        node_queue.push({other_node, axis_distance*axis_distance});
-
+        if (squared_axis_distance < best_distance)
+        {
+          node_queue.emplace(other_branch_node, squared_axis_distance);
+        }
         // Go to next node on this branch
-        current_node = next_node;
+        current_node = is_left ? current_node->m_left_child : current_node->m_right_child;
       }
     }
-
     return k_nearest_neighbors.get_container();
   }
 
@@ -473,7 +477,7 @@ private:
     std::iota(indexes.begin(), indexes.end(), 0);
 
     // First split to find the root node
-    KDNode* root_node = grow_tree(indexes.begin(), indexes.size(), 0, nullptr);
+    KDNode* root_node = grow_tree(indexes.begin(), indexes.size(), 0);
 
     std::chrono::steady_clock::time_point end_time = std::chrono::steady_clock::now();
 
@@ -487,8 +491,7 @@ private:
   template <typename iterator_type>
   KDNode* grow_tree(iterator_type start_idx_it,
                     unsigned int number_of_points,
-                    const unsigned int current_dimension,
-                    KDNode* root_node = nullptr)
+                    const unsigned int current_dimension)
   {
     // We arrived at a leaf !
     if (number_of_points==0)
@@ -499,15 +502,13 @@ private:
     if (number_of_points <= m_leaf_size)
     {
       //std::cout << "creating leaf node" << std::endl;
-      KDNode node(*start_idx_it, current_dimension, number_of_points);
+      KDNode node(*start_idx_it, current_dimension);
 
       node.m_indices.reserve(number_of_points);
       for (auto it = start_idx_it; it<start_idx_it+number_of_points; it++ )
       {
         node.m_indices.push_back(*it);
       }
-
-      node.m_parent = root_node;
 
       m_nodes.push_back(node);
       return &m_nodes.back();
@@ -531,10 +532,8 @@ private:
 
     unsigned int next_dimension = (current_dimension +1) % 3;
 
-    node.m_left_child = grow_tree(start_idx_it, median_pos, next_dimension, &node);
-    node.m_right_child = grow_tree(start_idx_it+median_pos+1, number_of_points-median_pos-1, next_dimension, &node);
-
-    node.m_parent = root_node;
+    node.m_left_child = grow_tree(start_idx_it, median_pos, next_dimension);
+    node.m_right_child = grow_tree(start_idx_it+median_pos+1, number_of_points-median_pos-1, next_dimension);
 
     m_nodes.push_back(node);
 
@@ -563,7 +562,7 @@ private:
     searchNN(point, next_node, best_match);
 
     // check if current node is a better match
-    auto current_distance = euclidian_distance(point, *node);
+    auto current_distance = squared_euclidian_distance(point, *node);
 
     if (current_distance < best_match.distance)
     {
@@ -603,7 +602,7 @@ private:
     KDNode* next_node = is_left ? node->m_left_child : node->m_right_child;
 
     // check if current node is a better match
-    auto current_distance = euclidian_distance(point, *node);
+    auto current_distance = squared_euclidian_distance(point, *node);
 
     if (current_distance < best_distance)
     {
@@ -633,6 +632,10 @@ private:
   PointCloud m_point_cloud;
   std::vector<KDNode> m_nodes;
   KDNode* m_root_node;
+
+  double* m_x;
+  double* m_y;
+  double* m_z;
 
   unsigned int m_leaf_size;
 };

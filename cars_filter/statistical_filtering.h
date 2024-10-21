@@ -25,37 +25,34 @@
 std::vector<unsigned int> statistical_filtering(double* x_coords,
                                                 double* y_coords,
                                                 double* z_coords,
-                                                unsigned int num_elem,
+                                                const unsigned int num_elem,
                                                 const double dev_factor = 1.,
-                                                const unsigned int k = 50)
+                                                const unsigned int k = 50,
+                                                const bool use_median = false)
 {
+std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
+
   auto input_point_cloud = PointCloud(x_coords, y_coords, z_coords, num_elem);
 
-  auto tree = KDTree(input_point_cloud, 16);
+  auto tree = KDTree(input_point_cloud, 40);
 
   std::vector<double> mean_distances;
   mean_distances.reserve(num_elem);
-
   for (unsigned int i=0; i< input_point_cloud.size(); i++)
   {
-    auto k_neighbors = tree.findKNNIterative(input_point_cloud.m_x[i], 
-                 input_point_cloud.m_y[i],
-                 input_point_cloud.m_z[i],
-                 k);
+    const PointType point = {input_point_cloud.m_x[i], input_point_cloud.m_y[i], input_point_cloud.m_z[i]};
+
+    auto k_neighbors = tree.findKNNIterative(point, k);
     double acc =0;
     for (const auto& elem : k_neighbors)
     {
       acc += std::sqrt(elem.distance);
     }
     mean_distances.push_back(acc/k);
-    //mean_distances.push_back(0);
   }
-
-std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
 
   double dist_thresh;
 
-  bool use_median = false;
   if (use_median)
   {
     // TODO: median mode
@@ -102,7 +99,7 @@ std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
   // std::cout << std::endl;
 
 std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
-std::cout << "Time difference = " << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << "[µs]" << std::endl;
+std::cout << "statistical_filtering duration = " << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << " ms" << std::endl;
   return result;
 }
 
