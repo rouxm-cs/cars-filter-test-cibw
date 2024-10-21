@@ -72,8 +72,9 @@ public:
 
   KDNode* m_left_child;
   KDNode* m_right_child;
+  KDNode* m_parent;
 
-  KDNode(unsigned int idx, unsigned int dimension): m_idx(idx), m_dimension(dimension), m_left_child(nullptr), m_right_child(nullptr)
+  KDNode(unsigned int idx, unsigned int dimension): m_idx(idx), m_dimension(dimension), m_left_child(nullptr), m_right_child(nullptr), m_parent(nullptr)
   {
   };
 };
@@ -175,7 +176,7 @@ public:
     return dx * dx + dy * dy + dz * dz;
   }
 
-  const std::vector<KDNode>& getNodes() const
+std::vector<KDNode>& getNodes()
   {
     return m_nodes;
   }
@@ -287,6 +288,7 @@ public:
         }
 
       }
+
     }
   }
 
@@ -358,7 +360,7 @@ public:
   }
 
 
-  std::vector<NeighborNode> findKNNIterative(const PointType& point, unsigned int k=1)
+  std::vector<NeighborNode> findKNNIterative(const PointType& point, unsigned int k=1, KDNode* starting_node= nullptr)
   {
     // Initialize the best matches container. Note that is empty at the 
     // beginning of the algorithm and is filled with neighbors until reaching k
@@ -370,21 +372,12 @@ public:
 
     Adapter<std::priority_queue< NeighborNode , std::vector<NeighborNode>, std::greater<NeighborNode> >> node_queue;
     node_queue.get_container().reserve(100);
-    node_queue.emplace(m_root_node, 0);
 
-    while(!node_queue.empty())
+    if (starting_node && starting_node->m_parent)
     {
-      const auto current_neighbor = node_queue.top();
-      auto current_node = current_neighbor.node;
-      const auto current_axis_distance = current_neighbor.distance;
-      node_queue.pop();
+      auto current_node = starting_node;
 
-      // Do we have to look at this side of the tree ?
-      if (current_axis_distance >= best_distance)
-      {
-        continue;
-      }
-
+      // go to the leaf of this branch
       while (current_node)
       {
         // We arrived at a leaf, if it contains a single point, process as usual
@@ -417,6 +410,119 @@ public:
             best_distance = k_nearest_neighbors.top().distance;
           }
         }
+
+        // Find on which side of the tree the point of interest is
+        const double axis_distance = point[current_dimension] - m_point_cloud.m_coords[current_dimension][current_idx];
+        const bool is_left = axis_distance < 0;
+        const double squared_axis_distance = axis_distance*axis_distance;
+        KDNode* other_branch_node = is_left ? current_node->m_right_child : current_node->m_left_child;
+
+        // Add the node on the other side of tree to the stack of node to be 
+        // processed. The check verifying that neighbors can actually be on
+        // this side is also done at the beginning of the loop, to avoid false 
+        // negatives in case a smaller distance is found in this branch
+        if (squared_axis_distance < best_distance)
+        {
+          node_queue.emplace(other_branch_node, squared_axis_distance);
+        }
+        // Go to next node on this branch
+        current_node = is_left ? current_node->m_left_child : current_node->m_right_child;
+      }
+
+      // Go back to root node
+      current_node = starting_node->m_parent;
+      KDNode* last_node = starting_node;
+      while (current_node)
+      {
+        const auto current_idx = current_node->m_idx;
+        const auto current_dimension = current_node->m_dimension;
+
+        // check if current node is a better match
+        auto current_distance = squared_euclidian_distance(point, current_node->m_idx);
+
+        if (current_distance < best_distance)
+        {
+          // remove the worst neighbor from the list
+          if (k_nearest_neighbors.size() == k)
+          {
+            k_nearest_neighbors.pop();
+          }
+          // add the current node to the list
+          k_nearest_neighbors.emplace(current_node, current_distance);
+          if (k_nearest_neighbors.size() == k)
+          {
+            best_distance = k_nearest_neighbors.top().distance;
+          }
+        }
+
+        // Find on which side of the tree the point of interest is
+        const double axis_distance = point[current_dimension] - m_point_cloud.m_coords[current_dimension][current_idx];
+        const bool is_left = axis_distance < 0;
+        const double squared_axis_distance = axis_distance*axis_distance;
+        KDNode* other_branch_node = last_node == current_node->m_left_child  ? current_node->m_right_child : current_node->m_left_child;
+
+        // Add the node on the other side of tree to the stack of node to be 
+        // processed. The check verifying that neighbors can actually be on
+        // this side is also done at the beginning of the loop, to avoid false 
+        // negatives in case a smaller distance is found in this branch
+        if (squared_axis_distance < best_distance)
+        {
+          node_queue.emplace(other_branch_node, squared_axis_distance);
+        }
+        last_node = current_node;
+        current_node = current_node->m_parent;
+      }
+    }
+    else
+    {
+      node_queue.emplace(m_root_node, 0);
+    }
+
+    while(!node_queue.empty())
+    {
+      const auto current_neighbor = node_queue.top();
+      auto current_node = current_neighbor.node;
+      const auto current_axis_distance = current_neighbor.distance;
+      node_queue.pop();
+
+      // Do we have to look at this side of the tree ?
+      if (current_axis_distance >= best_distance)
+      {
+        continue;
+      }
+
+      while (current_node)
+      {
+        // We arrived at a leaf, if it contains a single point, process as usual
+        // If it contains several point, we use brute force to compute all 
+        // distances in the leaf. This optimization helps reducing the number of
+        // branchs in the tree, and is adapted from scipy ckdtree implementation.
+        if (!current_node->m_indices.empty())
+        {
+          processLeaf(point, current_node, best_distance, k_nearest_neighbors, k);
+          break;
+        }
+
+        const auto current_idx = current_node->m_idx;
+        const auto current_dimension = current_node->m_dimension;
+
+        // check if current node is a better match
+        auto current_distance = squared_euclidian_distance(point, current_node->m_idx);
+
+        // if (current_distance < best_distance)
+        // {
+        //   // remove the worst neighbor from the list
+        //   if (k_nearest_neighbors.size() == k)
+        //   {
+        //     k_nearest_neighbors.pop();
+        //   }
+        //   // add the current node to the list
+        //   k_nearest_neighbors.emplace(current_node, current_distance);
+        //   if (k_nearest_neighbors.size() == k)
+        //   {
+        //     best_distance = k_nearest_neighbors.top().distance;
+        //   }
+        // }
 
         // Find on which side of the tree the point of interest is
         const double axis_distance = point[current_dimension] - m_point_cloud.m_coords[current_dimension][current_idx];
@@ -477,10 +583,10 @@ private:
     std::iota(indexes.begin(), indexes.end(), 0);
 
     // First split to find the root node
-    KDNode* root_node = grow_tree(indexes.begin(), indexes.size(), 0);
+    KDNode* root_node = grow_tree(indexes.begin(), indexes.size(), 0, nullptr);
 
     std::chrono::steady_clock::time_point end_time = std::chrono::steady_clock::now();
-
+    std::cout << "root node " << root_node->m_idx << std::endl;
     // TODO Debug info
     std::cout << "Tree build time" << std::chrono::duration_cast<std::chrono::milliseconds>(end_time - begin_time).count() << "ms" << std::endl;
     std::cout << "number of nodes " << m_nodes.size() << std::endl;
@@ -491,7 +597,8 @@ private:
   template <typename iterator_type>
   KDNode* grow_tree(iterator_type start_idx_it,
                     unsigned int number_of_points,
-                    const unsigned int current_dimension)
+                    const unsigned int current_dimension,
+                    KDNode* parent_node)
   {
     // We arrived at a leaf !
     if (number_of_points==0)
@@ -509,6 +616,8 @@ private:
       {
         node.m_indices.push_back(*it);
       }
+
+      node.m_parent = parent_node;
 
       m_nodes.push_back(node);
       return &m_nodes.back();
@@ -532,12 +641,16 @@ private:
 
     unsigned int next_dimension = (current_dimension +1) % 3;
 
-    node.m_left_child = grow_tree(start_idx_it, median_pos, next_dimension);
-    node.m_right_child = grow_tree(start_idx_it+median_pos+1, number_of_points-median_pos-1, next_dimension);
-
     m_nodes.push_back(node);
+    KDNode* nodeaaa = &m_nodes.back();
 
-    return &m_nodes.back();
+    nodeaaa->m_parent = parent_node;
+    nodeaaa->m_left_child = grow_tree(start_idx_it, median_pos, next_dimension, nodeaaa);
+    nodeaaa->m_right_child = grow_tree(start_idx_it+median_pos+1, number_of_points-median_pos-1, next_dimension, nodeaaa);
+
+    //m_nodes.push_back(node);
+
+    return nodeaaa;
   }
 
   //TODO reference here for PointType
@@ -615,15 +728,11 @@ private:
     // Go to this branch leaf
     searchKNN(point, next_node, best_matches, best_distance);
 
-    // std::cout << "current distance: " << current_distance << " ,k best distance:" << best_matches.top().distance << std::endl;
-    // std::cout << "size: " << best_matches.size();
-
     // Check we need to search for point in the other side of this node
     double axis_distance = std::abs(point[current_dimension] - m_point_cloud.m_coords[current_dimension][current_idx]);
 
     if (axis_distance < best_distance)
     {
-      //std::cout << "a better match might be on the other side !" << std::endl;
       KDNode* other_node = is_left ? node->m_right_child : node->m_left_child;
       searchKNN(point, other_node, best_matches, best_distance);
     }

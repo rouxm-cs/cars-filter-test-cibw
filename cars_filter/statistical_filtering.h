@@ -36,20 +36,56 @@ std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
 
   auto tree = KDTree(input_point_cloud, 40);
 
-  std::vector<double> mean_distances;
-  mean_distances.reserve(num_elem);
-  for (unsigned int i=0; i< input_point_cloud.size(); i++)
-  {
-    const PointType point = {input_point_cloud.m_x[i], input_point_cloud.m_y[i], input_point_cloud.m_z[i]};
+  // std::vector<double> mean_distances;
+  // mean_distances.reserve(num_elem);
+  // for (unsigned int i=0; i< input_point_cloud.size(); i++)
+  // {
+  //   const PointType point = {input_point_cloud.m_x[i], input_point_cloud.m_y[i], input_point_cloud.m_z[i]};
 
-    auto k_neighbors = tree.findKNNIterative(point, k);
-    double acc =0;
-    for (const auto& elem : k_neighbors)
+  //   auto k_neighbors = tree.findKNNIterative(point, k);
+  //   double acc =0;
+  //   for (const auto& elem : k_neighbors)
+  //   {
+  //     acc += std::sqrt(elem.distance);
+  //   }
+  //   mean_distances.push_back(acc/k);
+  // }
+
+
+  std::vector<double> mean_distances(num_elem, 0);
+  for (auto& node: tree.getNodes())
+  {
+    // Leaf Node case
+    if (node.m_indices.empty())
     {
-      acc += std::sqrt(elem.distance);
+      const PointType point = {input_point_cloud.m_x[node.m_idx], input_point_cloud.m_y[node.m_idx], input_point_cloud.m_z[node.m_idx]};
+
+      auto k_neighbors = tree.findKNNIterative(point, k, &node);
+      double acc =0;
+      for (const auto& elem : k_neighbors)
+      {
+        acc += std::sqrt(elem.distance);
+      }
+      mean_distances[node.m_idx] = acc/k;
     }
-    mean_distances.push_back(acc/k);
+    else
+    {
+      for (auto idx: node.m_indices)
+      {
+        const PointType point = {input_point_cloud.m_x[idx], input_point_cloud.m_y[idx], input_point_cloud.m_z[idx]};
+
+        auto k_neighbors = tree.findKNNIterative(point, k, &node);
+        double acc =0;
+        for (const auto& elem : k_neighbors)
+        {
+          acc += std::sqrt(elem.distance);
+        }
+        mean_distances[idx] = acc/k;
+      }
+    }
+
   }
+
 
   double dist_thresh;
 
@@ -99,7 +135,7 @@ std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
   // std::cout << std::endl;
 
 std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
-std::cout << "statistical_filtering duration = " << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << " ms" << std::endl;
+std::cout << "statistical_filtering duration = " << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << " ms." << std::endl;
   return result;
 }
 
