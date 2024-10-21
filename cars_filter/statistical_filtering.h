@@ -61,9 +61,13 @@ std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
     // Leaf Node case
     if (node.m_indices.empty())
     {
-      const PointType point = {input_point_cloud.m_x[node.m_idx], input_point_cloud.m_y[node.m_idx], input_point_cloud.m_z[node.m_idx]};
+      //const PointType point = {input_point_cloud.m_x[node.m_idx], input_point_cloud.m_y[node.m_idx], input_point_cloud.m_z[node.m_idx]};
 
-      auto k_neighbors = tree.findKNNIterative(point, k, &node);
+      auto k_neighbors = tree.findKNNIterative(input_point_cloud.m_x[node.m_idx],
+                                               input_point_cloud.m_y[node.m_idx],
+                                               input_point_cloud.m_z[node.m_idx],
+                                               k,
+                                               &node);
       double acc =0;
       for (const auto& elem : k_neighbors)
       {
@@ -75,9 +79,12 @@ std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
     {
       for (auto idx: node.m_indices)
       {
-        const PointType point = {input_point_cloud.m_x[idx], input_point_cloud.m_y[idx], input_point_cloud.m_z[idx]};
-
-        auto k_neighbors = tree.findKNNIterative(point, k, &node);
+        //const PointType point = {input_point_cloud.m_x[idx], input_point_cloud.m_y[idx], input_point_cloud.m_z[idx]};
+        auto k_neighbors = tree.findKNNIterative(input_point_cloud.m_x[idx],
+                                                 input_point_cloud.m_y[idx],
+                                                 input_point_cloud.m_z[idx],
+                                                 k,
+                                                 &node);
         double acc =0;
         for (const auto& elem : k_neighbors)
         {
@@ -141,8 +148,6 @@ std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
 std::cout << "statistical_filtering duration = " << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << " ms." << std::endl;
   return result;
 }
-
-
 
 
 void epipolar_statistical_filtering(Image<double>& x_coords,

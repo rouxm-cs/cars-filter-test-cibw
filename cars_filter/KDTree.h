@@ -90,6 +90,7 @@ struct NeighborNode
 
 };
 
+// Define operator< and operator> for std::greater and std::less
 inline bool operator< (const NeighborNode& lhs, const NeighborNode& rhs) 
 {
   return lhs.distance < rhs.distance;
@@ -158,9 +159,9 @@ public:
 
   inline double squared_euclidian_distance(const PointType& point, const KDNode& node) const
   {
-    const double dx = point[0] - m_point_cloud.m_x[node.m_idx];
-    const double dy = point[1] - m_point_cloud.m_y[node.m_idx];
-    const double dz = point[2] - m_point_cloud.m_z[node.m_idx];
+    const double dx = point[0] - m_x[node.m_idx];
+    const double dy = point[1] - m_y[node.m_idx];
+    const double dz = point[2] - m_z[node.m_idx];
 
     return dx * dx + dy * dy + dz * dz;
   }
@@ -174,19 +175,29 @@ public:
     return dx * dx + dy * dy + dz * dz;
   }
 
+
+  inline double squared_euclidian_distance(double x, double y, double z, const unsigned int idx) const
+  {
+    const double dx = x - m_x[idx];
+    const double dy = y - m_y[idx];
+    const double dz = z - m_z[idx];
+
+    return dx * dx + dy * dy + dz * dz;
+  }
+
   std::vector<KDNode>& getNodes()
   {
     return m_nodes;
   }
 
 
-  void processLeaf(const PointType& point, KDNode* node, double& best_distance, KNeighborList& k_nearest_neighbors, const unsigned int k=1);
+  void processLeaf(double x, double y, double z, KDNode* node, double& best_distance, KNeighborList& k_nearest_neighbors, const unsigned int k=1);
 
   void processLeafBall(const PointType& point, KDNode* node, std::vector<unsigned int>& neighbors, double squared_radius);
 
   std::vector<unsigned int> epipolar_neighbors_in_ball(double x, double y, double z, double radius);
 
-  std::vector<NeighborNode> findKNNIterative(const PointType& point, unsigned int k=1, KDNode* starting_node= nullptr);
+  std::vector<NeighborNode> findKNNIterative(double x, double y, double z, unsigned int k=1, KDNode* starting_node= nullptr);
 
 
 private:
@@ -243,6 +254,23 @@ private:
     return node_ptr;
   }
 
+
+inline double compute_axis_distance(const unsigned int dimension, const double x, const double y, const double z, const unsigned int idx)
+{
+  if (dimension == 0)
+  {
+    return x-m_x[idx];
+  }
+  else if (dimension == 1)
+  {
+    return y-m_y[idx];
+  }
+  else
+  {
+    return z-m_z[idx];
+  }
+
+}
 
   PointCloud m_point_cloud;
   std::vector<KDNode> m_nodes;

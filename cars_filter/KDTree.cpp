@@ -72,7 +72,9 @@ std::vector<unsigned int> KDTree::epipolar_neighbors_in_ball(double x,
   return neighbors;
 }
 
-std::vector<NeighborNode> KDTree::findKNNIterative(const PointType& point,
+std::vector<NeighborNode> KDTree::findKNNIterative(double x,
+                                                   double y,
+                                                   double z,
                                                    unsigned int k,
                                                    KDNode* starting_node)
 {
@@ -100,7 +102,7 @@ std::vector<NeighborNode> KDTree::findKNNIterative(const PointType& point,
       // branchs in the tree, and is adapted from scipy ckdtree implementation.
       if (!current_node->m_indices.empty())
       {
-        processLeaf(point, current_node, best_distance, k_nearest_neighbors, k);
+        processLeaf(x, y, z, current_node, best_distance, k_nearest_neighbors, k);
         break;
       }
 
@@ -108,7 +110,7 @@ std::vector<NeighborNode> KDTree::findKNNIterative(const PointType& point,
       const auto current_dimension = current_node->m_dimension;
 
       // check if current node is a better match
-      auto current_distance = squared_euclidian_distance(point, current_node->m_idx);
+      auto current_distance = squared_euclidian_distance(x, y, z, current_node->m_idx);
 
       if (current_distance < best_distance)
       {
@@ -126,7 +128,7 @@ std::vector<NeighborNode> KDTree::findKNNIterative(const PointType& point,
       }
 
       // Find on which side of the tree the point of interest is
-      const double axis_distance = point[current_dimension] - m_point_cloud.m_coords[current_dimension][current_idx];
+      const double axis_distance = compute_axis_distance(current_dimension, x, y, z, current_idx);
       const bool is_left = axis_distance < 0;
       const double squared_axis_distance = axis_distance*axis_distance;
       KDNode* other_branch_node = is_left ? current_node->m_right_child : current_node->m_left_child;
@@ -152,7 +154,7 @@ std::vector<NeighborNode> KDTree::findKNNIterative(const PointType& point,
       const auto current_dimension = current_node->m_dimension;
 
       // check if current node is a better match
-      auto current_distance = squared_euclidian_distance(point, current_node->m_idx);
+      auto current_distance = squared_euclidian_distance(x, y, z, current_node->m_idx);
 
       if (current_distance < best_distance)
       {
@@ -170,7 +172,7 @@ std::vector<NeighborNode> KDTree::findKNNIterative(const PointType& point,
       }
 
       // Find on which side of the tree the point of interest is
-      const double axis_distance = point[current_dimension] - m_point_cloud.m_coords[current_dimension][current_idx];
+      const double axis_distance = compute_axis_distance(current_dimension, x, y, z, current_idx);
       const bool is_left = axis_distance < 0;
       const double squared_axis_distance = axis_distance*axis_distance;
       KDNode* other_branch_node = last_node == current_node->m_left_child  ? current_node->m_right_child : current_node->m_left_child;
@@ -213,7 +215,7 @@ std::vector<NeighborNode> KDTree::findKNNIterative(const PointType& point,
       // branchs in the tree, and is adapted from scipy ckdtree implementation.
       if (!current_node->m_indices.empty())
       {
-        processLeaf(point, current_node, best_distance, k_nearest_neighbors, k);
+        processLeaf(x, y, z, current_node, best_distance, k_nearest_neighbors, k);
         break;
       }
 
@@ -221,7 +223,7 @@ std::vector<NeighborNode> KDTree::findKNNIterative(const PointType& point,
       const auto current_dimension = current_node->m_dimension;
 
       // check if current node is a better match
-      auto current_distance = squared_euclidian_distance(point, current_node->m_idx);
+      auto current_distance = squared_euclidian_distance(x, y, z, current_node->m_idx);
 
       if (current_distance < best_distance)
       {
@@ -239,7 +241,7 @@ std::vector<NeighborNode> KDTree::findKNNIterative(const PointType& point,
       }
 
       // Find on which side of the tree the point of interest is
-      const double axis_distance = point[current_dimension] - m_point_cloud.m_coords[current_dimension][current_idx];
+      const double axis_distance = compute_axis_distance(current_dimension, x, y, z, current_idx);
       const bool is_left = axis_distance < 0;
       const double squared_axis_distance = axis_distance*axis_distance;
       KDNode* other_branch_node = is_left ? current_node->m_right_child : current_node->m_left_child;
@@ -259,7 +261,9 @@ std::vector<NeighborNode> KDTree::findKNNIterative(const PointType& point,
   return k_nearest_neighbors.get_container();
 }
 
-void KDTree::processLeaf(const PointType& point,
+void KDTree::processLeaf(double x,
+                         double y,
+                         double z,
                          KDNode* node,
                          double& best_distance,
                          KNeighborList& k_nearest_neighbors, 
@@ -268,7 +272,8 @@ void KDTree::processLeaf(const PointType& point,
   for (auto idx_it = node->m_indices.begin(); idx_it !=  node->m_indices.end(); idx_it++)
   {
     // check if current node is a better match
-    auto current_distance = squared_euclidian_distance(point, *idx_it);
+    auto current_distance = squared_euclidian_distance(x, y, z, 
+                                      m_x[*idx_it], m_y[*idx_it], m_z[*idx_it]);
     //std::cout << current_distance << " ";
     if (current_distance < best_distance)
     {
@@ -294,9 +299,9 @@ void KDTree::processLeafBall(const PointType& point, KDNode* node, std::vector<u
 {
   for (auto idx_it = node->m_indices.begin(); idx_it !=  node->m_indices.end(); idx_it++)
   {
-    PointType node_point = {m_point_cloud.m_x[*idx_it], 
-                            m_point_cloud.m_y[*idx_it], 
-                            m_point_cloud.m_z[*idx_it]};
+    PointType node_point = {m_x[*idx_it],
+                            m_y[*idx_it],
+                            m_z[*idx_it]};
     // check if current node is in the ball around the point
     if (squared_euclidian_distance(point, node_point) < squared_radius)
     {
