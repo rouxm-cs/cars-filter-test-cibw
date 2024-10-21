@@ -22,6 +22,9 @@
 
 #include <chrono>
 
+namespace cars_filter
+{
+
 std::vector<unsigned int> statistical_filtering(double* x_coords,
                                                 double* y_coords,
                                                 double* z_coords,
@@ -140,8 +143,6 @@ std::cout << "statistical_filtering duration = " << std::chrono::duration_cast<s
 }
 
 
-namespace cars_filter
-{
 
 
 void epipolar_statistical_filtering(Image<double>& x_coords,

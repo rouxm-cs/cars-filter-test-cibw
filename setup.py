@@ -28,7 +28,11 @@ from setuptools import setup
 
 try:
     ext_modules = [
-        Pybind11Extension("outlier_filter", ["cars_filter/filter.cpp"]),
+        Pybind11Extension(
+            "outlier_filter",
+            ["cars_filter/filter.cpp", "cars_filter/KDTree.cpp"],
+            extra_compile_args=["-O3"],
+        ),
     ]
 
     setup(

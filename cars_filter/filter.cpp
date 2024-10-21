@@ -102,7 +102,7 @@ py::list pyPointCloudStatisticalOutlierFiltering(py::array_t<double,
   py::buffer_info z_info = z_array.request();
   auto z_coords = static_cast<double *>(z_info.ptr);
 
-  auto result = statistical_filtering(x_coords, y_coords, z_coords, x_info.shape[0], dev_factor, k);
+  auto result = cars_filter::statistical_filtering(x_coords, y_coords, z_coords, x_info.shape[0], dev_factor, k);
 
   // Copy C++ vector to Python list
   // As result has variable length, I am not sure if the copy can be avoided here in pyBind
@@ -172,7 +172,7 @@ py::list pyOutlierFiltering(py::array_t<double,
   std::vector<unsigned int> result;
   if (method == "statistical_filtering")
   {
-    result = statistical_filtering(x_coords, y_coords, z_coords, x_info.shape[0]);
+    result = cars_filter::statistical_filtering(x_coords, y_coords, z_coords, x_info.shape[0]);
   }
   else if (method == "small_components_filtering")
   {
