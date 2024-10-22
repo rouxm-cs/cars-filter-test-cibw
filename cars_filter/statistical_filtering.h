@@ -25,6 +25,41 @@
 namespace cars_filter
 {
 
+/*
+*
+* \brief Compute median of input vector
+* 
+* Note: the vector is copied because nth_element modifies the input container
+*/
+template<typename T>
+std::tuple<T, T, T> compute_median(std::vector<T> input_data)
+{
+  std::cout << "compute median" << std::endl;
+  unsigned int size = input_data.size();
+  unsigned int first_quarter_pos = static_cast<unsigned int>(size/4);
+  unsigned int half_pos = static_cast<unsigned int>(size/2);
+  unsigned int third_quarter_pos = first_quarter_pos + half_pos;
+  std::cout << "input data sizes" << size << " " << first_quarter_pos << " " << half_pos << " " << third_quarter_pos << std::endl;
+
+  // Split the container at the median
+  std::nth_element(input_data.begin(),
+                   input_data.begin() + half_pos,
+                   input_data.end());
+
+  // Split the first half of the container at the 0.25 quantile
+  std::nth_element(input_data.begin(),
+                   input_data.begin() + first_quarter_pos,
+                   input_data.begin() + half_pos);
+
+  // Split the other half of the container at the 0.75 quantile
+  std::nth_element(input_data.begin() + half_pos+1,
+                   input_data.begin() + third_quarter_pos,
+                   input_data.end());
+
+  return {input_data[first_quarter_pos], input_data[half_pos], input_data[third_quarter_pos]};
+}
+
+
 std::vector<unsigned int> statistical_filtering(double* x_coords,
                                                 double* y_coords,
                                                 double* z_coords,
@@ -93,15 +128,17 @@ std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
         mean_distances[idx] = acc/k;
       }
     }
-
   }
-
 
   double dist_thresh;
 
   if (use_median)
   {
-    // TODO: median mode
+    auto [percentile_25, median, percentile_75] = compute_median(mean_distances);
+    double interquartile_distance = percentile_75 - percentile_25;
+
+    std::cout << "computed percentiles " << percentile_25 << " " << median << " " << percentile_75 << std::endl;
+    dist_thresh = median + dev_factor * interquartile_distance;
   }
   else
   {
@@ -133,19 +170,6 @@ std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
     }
   }
 
-  // mask version
-  // std::transform(mean_distances.begin(), mean_distances.end(), result.begin(), 
-  //       [dist_thresh](double input) {return input < dist_thresh;});
-
-  // std::cout << "resultsize" << result.size() << std::endl;
-  // for (unsigned int i=0; i<num_elem; i++)
-  // {
-  //   std::cout << static_cast<int>(elem) << " ";
-  // }
-  // std::cout << std::endl;
-
-std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
-std::cout << "statistical_filtering duration = " << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << " ms." << std::endl;
   return result;
 }
 
@@ -153,18 +177,17 @@ std::cout << "statistical_filtering duration = " << std::chrono::duration_cast<s
 void epipolar_statistical_filtering(Image<double>& x_coords,
                                     Image<double>& y_coords,
                                     Image<double>& z_coords,
-                                    Image<double>& outlier_array)
+                                    Image<double>& outlier_array,
+                                    const unsigned int k = 50,
+                                    const unsigned int half_window_size = 15,
+                                    const double dev_factor = 1)
 {
-  unsigned k = 15;
-  unsigned half_window_size = 7;
-
   InMemoryImage<double> mean_distance_image(x_coords.number_of_rows(), x_coords.number_of_cols());
 
   for (unsigned int row=0; row < x_coords.number_of_rows(); row++)
   {
     for (unsigned int col=0; col < x_coords.number_of_cols(); col++)
     {
-      //std::cout << row << " " << col << std::endl;
       auto mean_dist = epipolar_knn(x_coords, y_coords, z_coords, row, col, k, half_window_size);
       mean_distance_image.get(row, col) = mean_dist;
     }
@@ -210,9 +233,10 @@ void epipolar_statistical_filtering(Image<double>& x_coords,
 
   std::cout << "var " << var << std::endl;
 
-  const double dev_factor = 1;
 
   const double distance_threshold = mean + dev_factor * stddev;
+
+  std::cout << "distance_threshold " << distance_threshold << std::endl;
 
   for (unsigned int row=0; row < x_coords.number_of_rows(); row++)
   {
@@ -224,7 +248,6 @@ void epipolar_statistical_filtering(Image<double>& x_coords,
         x_coords.get(row, col) = std::numeric_limits<double>::quiet_NaN();
         z_coords.get(row, col) = std::numeric_limits<double>::quiet_NaN();
         z_coords.get(row, col) = std::numeric_limits<double>::quiet_NaN();
-
       }
     }
   }

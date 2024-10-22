@@ -55,7 +55,6 @@ std::vector<unsigned int> KDTree::epipolar_neighbors_in_ball(double x,
 
       if (squared_euclidian_distance(point, *current_node) < squared_radius)
       {
-        //std::cout << squared_euclidian_distance(point, *current_node) << " " << current_node->m_idx << " " << squared_radius << std::endl;
         neighbors.push_back(current_node->m_idx);
       }
 

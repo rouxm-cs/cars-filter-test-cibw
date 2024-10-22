@@ -26,25 +26,25 @@
 namespace cars_filter
 {
 
-  bool isnan(const PointType& point)
-  {
-    return std::isnan(point[0]) || std::isnan(point[1]) || std::isnan(point[2]);
-  }
+bool isnan(const PointType& point)
+{
+  return std::isnan(point[0]) || std::isnan(point[1]) || std::isnan(point[2]);
+}
 
-  double squared_euclidian_distance(double x1, double y1, double z1, double x2, double y2, double z2)
-  {
-    return (x1-x2)*(x1-x2) + (y1-y2)*(y1-y2) + (z1-z2)*(z1-z2); 
-  }
+double squared_euclidian_distance(double x1, double y1, double z1, double x2, double y2, double z2)
+{
+  return (x1-x2)*(x1-x2) + (y1-y2)*(y1-y2) + (z1-z2)*(z1-z2); 
+}
 
-  double squared_euclidian_distance(const PointType& point1, const PointType& point2) 
-  {
-    return squared_euclidian_distance(point1[0],
-                              point1[1],
-                              point1[2],
-                              point2[0],
-                              point2[1],
-                              point2[2]);
-  }
+double squared_euclidian_distance(const PointType& point1, const PointType& point2) 
+{
+  return squared_euclidian_distance(point1[0],
+                            point1[1],
+                            point1[2],
+                            point2[0],
+                            point2[1],
+                            point2[2]);
+}
 
 double epipolar_knn(const Image<double>& x_coords,
                   const Image<double>& y_coords,
@@ -98,10 +98,16 @@ double epipolar_knn(const Image<double>& x_coords,
   std::nth_element(distances.begin(), distances.begin() + k, distances.end());
 
   // apply sqrt on k first sorted distances
-  std::for_each(distances.begin(),
-                distances.begin() + k,
-                [](double val){return std::sqrt(val);});
+  std::transform(distances.begin(),
+                 distances.begin() + k,
+                 distances.begin(),
+                 [](double val){return std::sqrt(val);});
 
+
+  if (std::isnan(std::accumulate(distances.begin(), distances.begin() + k, 0.)/k))
+  {
+    std::cout << "wtf " << std::endl;
+  }
 
   // return mean of k first sorted distances
   return std::accumulate(distances.begin(), distances.begin() + k, 0.)/k;
@@ -132,7 +138,6 @@ std::vector<std::pair<unsigned int, unsigned int>> epipolar_neighbors_in_ball(
     unsigned int start_col = std::max(0, static_cast<int>(ref_col)-static_cast<int>(half_window_size));
     unsigned int end_col = std::min(x_coords.number_of_cols(), ref_col+half_window_size);
 
-
     for (unsigned int row = start_row; row<end_row; row++)
     {
       for (unsigned int col = start_col; col<end_col; col++)
@@ -149,34 +154,6 @@ std::vector<std::pair<unsigned int, unsigned int>> epipolar_neighbors_in_ball(
   }
 
   return neighbors;
-
-    // """
-    // find all point in a radius around the input point, limiting the search to a 
-    // window in the epipolar image
-    // """
-    // start_row = max(0, idx[0] - window_half_size)
-    // end_row = min(x_coords.shape[0], idx[0] + window_half_size)
-    // start_col = max(0, idx[1] - window_half_size)
-    // end_col = min(x_coords.shape[1],  idx[1] + window_half_size)
-
-    // x_extract = x_coords[start_row:end_row, start_col:end_col]
-    // y_extract = y_coords[start_row:end_row, start_col:end_col]
-    // z_extract = z_coords[start_row:end_row, start_col:end_col]
-
-    // x_ref = x_coords[idx[0], idx[1]]
-    // y_ref = y_coords[idx[0], idx[1]]
-    // z_ref = z_coords[idx[0], idx[1]]
-
-    // squared_euclidian_distances = (x_extract-x_ref)**2 + (y_extract-y_ref)**2 + (z_extract-z_ref)**2 
-
-    // neighbors = np.where(squared_euclidian_distances < radius**2)
-
-    // k_row = neighbors[0] + start_row
-    // k_col = neighbors[1] + start_col
-
-    // return (k_row, k_col)
-
-
 }
 
 
