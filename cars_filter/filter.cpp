@@ -24,50 +24,13 @@
 
 #include "KDTree.h"
 
-
-
 namespace py = pybind11;
-
 
 template<typename T>
 cars_filter::Image<T> pyarray_to_image(py::array_t<T> input_array)
 {
   py::buffer_info info = input_array.request();
   return cars_filter::Image<T>(static_cast<T*>(info.ptr), info.shape[0], info.shape[1]);
-}
-
-
-py::array_t<double, py::array::c_style> pyEpipolarOutlierFiltering(
-        py::array_t<double, py::array::c_style | py::array::forcecast>& x_values,
-        py::array_t<double, py::array::c_style | py::array::forcecast>& y_values,
-        py::array_t<double, py::array::c_style | py::array::forcecast>& z_values,
-        const std::string& method
-)
-{
-  // Build image wrappers around numpy arrays
-  auto x_image = pyarray_to_image<double>(x_values);
-  auto y_image = pyarray_to_image<double>(y_values);
-  auto z_image = pyarray_to_image<double>(z_values);
-
-  std::cout << "nrow ncol " << x_image.number_of_rows() << " " <<  x_image.number_of_cols() << std::endl;
-
-  // // Create a Python object
-  py::array_t<double, py::array::c_style> outlier_array({x_image.number_of_rows(),  x_image.number_of_cols()},
-                                                        {x_image.number_of_cols() * sizeof(double),  sizeof(double)});
-  auto outlier_image = pyarray_to_image<double>(outlier_array);
-
-  if (method == "statistical_filtering")
-  {
-    std::cout << "Epipolar Outlier Filtering" << std::endl;
-    epipolar_statistical_filtering(x_image, y_image, z_image, outlier_image);
-  }
-  else if (method == "small_components_filtering")
-  {
-    std::cout << "Small components filtering" << std::endl;
-    epipolar_small_components_filtering(x_image, y_image, z_image, outlier_image);
-  }
-
-  return outlier_array;
 }
 
 
@@ -113,9 +76,7 @@ py::array_t<double, py::array::c_style> pyEpipolarSmallComponentsOutlierFilterin
   auto y_image = pyarray_to_image<double>(y_values);
   auto z_image = pyarray_to_image<double>(z_values);
 
-  std::cout << "nrow ncol " << x_image.number_of_rows() << " " <<  x_image.number_of_cols() << std::endl;
-
-  // // Create a Python object
+  // Create a Python object
   py::array_t<double, py::array::c_style> outlier_array({x_image.number_of_rows(),  x_image.number_of_cols()},
                                                         {x_image.number_of_cols() * sizeof(double),  sizeof(double)});
   auto outlier_image = pyarray_to_image<double>(outlier_array);
@@ -198,26 +159,52 @@ py::list pyPointCloudSmallComponentsOutlierFiltering(py::array_t<double,
 // wrap as Python module
 PYBIND11_MODULE(outlier_filter, m)
 {
-  m.doc() = "filter";
+  m.doc() = "Wrapper module of cars-filter, a c++ module for 3D point filtering";
   m.def("pc_small_components_outlier_filtering",
         &pyPointCloudSmallComponentsOutlierFiltering,
-        "Filter outliers from point cloud using statistical method"
-        );
+        "Filter outliers from point cloud using statistical method",
+        py::arg("x_array"),
+        py::arg("y_array"),
+        py::arg("z_array"),
+        py::arg("radius") = 3.,
+        py::arg("min_cluster_size") = 50,
+        py::arg("clusters_distance_threshold") = std::numeric_limits<double>::quiet_NaN()
+  );
 
   m.def("pc_statistical_outlier_filtering",
-    &pyPointCloudStatisticalOutlierFiltering,
-    "Filter outliers from point cloud using small components method"
-    );
+        &pyPointCloudStatisticalOutlierFiltering,
+        "Filter outliers from point cloud using small components method",
+        py::arg("x_array"),
+        py::arg("y_array"),
+        py::arg("z_array"),
+        py::arg("dev_factor") = 1.,
+        py::arg("k") = 15,
+        py::arg("use_median") = false
+  );
 
   m.def("epipolar_small_components_outlier_filtering",
         &pyEpipolarSmallComponentsOutlierFiltering,
         "Filter outliers from depth map in epipolar geometry",
+        py::arg("x_values"),
+        py::arg("y_values"),
+        py::arg("z_values"),
+        py::arg("min_cluster_size") = 50,
+        py::arg("radius") = 3.,
+        py::arg("half_window_size") = 10,
+        py::arg("clusters_distance_threshold") = std::numeric_limits<double>::quiet_NaN(),
         py::return_value_policy::take_ownership
-        );
+  );
 
   m.def("epipolar_statistical_outlier_filtering",
         &pyEpipolarStatisticalOutlierFiltering,
         "Filter outliers from depth map in epipolar geometry",
+        py::arg("x_values"),
+        py::arg("y_values"),
+        py::arg("z_values"),
+        py::arg("k") = 15,
+        py::arg("half_window_size") = 10,
+        py::arg("dev_factor") = 1.,
+        py::arg("use_median") = false,
         py::return_value_policy::take_ownership
-        );
+  );
 }
