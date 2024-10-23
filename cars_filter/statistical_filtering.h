@@ -27,12 +27,16 @@ namespace cars_filter
 
 /*
 *
-* \brief Compute median of input vector
+* \brief Compute first quartile, median and third quartile of input vector
+* 
+* This function returns the closest element (rounded down) to the quantile.
+* For example the median of a vector of 30 elements is the 15th element,
+* not the mean between the 15th and 16th.
 * 
 * Note: the vector is copied because nth_element modifies the input container
 */
 template<typename T>
-std::tuple<T, T, T> compute_median(std::vector<T> input_data)
+std::tuple<T, T, T> compute_approximate_quantiles(std::vector<T> input_data)
 {
   unsigned int size = input_data.size();
   unsigned int first_quarter_pos = static_cast<unsigned int>(size/4);
@@ -72,34 +76,16 @@ std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
 
   auto tree = KDTree(input_point_cloud, 40);
 
-  // std::vector<double> mean_distances;
-  // mean_distances.reserve(num_elem);
-  // for (unsigned int i=0; i< input_point_cloud.size(); i++)
-  // {
-  //   const PointType point = {input_point_cloud.m_x[i], input_point_cloud.m_y[i], input_point_cloud.m_z[i]};
-
-  //   auto k_neighbors = tree.findKNNIterative(point, k);
-  //   double acc =0;
-  //   for (const auto& elem : k_neighbors)
-  //   {
-  //     acc += std::sqrt(elem.distance);
-  //   }
-  //   mean_distances.push_back(acc/k);
-  // }
-
-
   std::vector<double> mean_distances(num_elem, 0);
   for (auto& node: tree.getNodes())
   {
     // Leaf Node case
     if (node.m_indices.empty())
     {
-      //const PointType point = {input_point_cloud.m_x[node.m_idx], input_point_cloud.m_y[node.m_idx], input_point_cloud.m_z[node.m_idx]};
-
       auto k_neighbors = tree.findKNNIterative(input_point_cloud.m_x[node.m_idx],
                                                input_point_cloud.m_y[node.m_idx],
                                                input_point_cloud.m_z[node.m_idx],
-                                               k,
+                                               k+1,
                                                &node);
       double acc =0;
       for (const auto& elem : k_neighbors)
@@ -116,7 +102,7 @@ std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
         auto k_neighbors = tree.findKNNIterative(input_point_cloud.m_x[idx],
                                                  input_point_cloud.m_y[idx],
                                                  input_point_cloud.m_z[idx],
-                                                 k,
+                                                 k+1,
                                                  &node);
         double acc =0;
         for (const auto& elem : k_neighbors)
@@ -132,7 +118,7 @@ std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
 
   if (use_median)
   {
-    auto [percentile_25, median, percentile_75] = compute_median(mean_distances);
+    auto [percentile_25, median, percentile_75] = compute_approximate_quantiles(mean_distances);
     double interquartile_distance = percentile_75 - percentile_25;
     dist_thresh = median + dev_factor * interquartile_distance;
   }
@@ -183,7 +169,7 @@ void epipolar_statistical_filtering(Image<double>& x_coords,
   {
     for (unsigned int col=0; col < x_coords.number_of_cols(); col++)
     {
-      auto mean_dist = epipolar_knn(x_coords, y_coords, z_coords, row, col, k, half_window_size);
+      auto mean_dist = epipolar_knn(x_coords, y_coords, z_coords, row, col, k+1, half_window_size);
       mean_distance_image.get(row, col) = mean_dist;
     }
   }
@@ -197,7 +183,7 @@ void epipolar_statistical_filtering(Image<double>& x_coords,
                 mean_distance_image.getData() + mean_distance_image.size(),
                 std::back_inserter(mean_distances_no_nan),
                 [](double elem){return !std::isnan(elem);});
-    auto [percentile_25, median, percentile_75] = compute_median(mean_distances_no_nan);
+    auto [percentile_25, median, percentile_75] = compute_approximate_quantiles(mean_distances_no_nan);
     double interquartile_distance = percentile_75 - percentile_25;
 
     distance_threshold = median + dev_factor * interquartile_distance;

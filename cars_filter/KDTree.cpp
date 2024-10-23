@@ -302,7 +302,7 @@ void KDTree::processLeafBall(const PointType& point, KDNode* node, std::vector<u
                             m_y[*idx_it],
                             m_z[*idx_it]};
     // check if current node is in the ball around the point
-    if (squared_euclidian_distance(point, node_point) < squared_radius)
+    if (squared_euclidian_distance(point, node_point) <= squared_radius)
     {
       //std::cout << squared_euclidian_distance(point, node_point) << " " << *idx_it << " " << squared_radius << std::endl;
       neighbors.push_back(*idx_it);

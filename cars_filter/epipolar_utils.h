@@ -115,7 +115,9 @@ double epipolar_knn(const Image<double>& x_coords,
 
 
   // return mean of k first sorted distances
-  return std::accumulate(distances.begin(), distances.begin() + k, 0.)/k;
+  // Note that we divide by k-1 because it is assumed that the point itself
+  // is in the neighborhood (distance = 0)
+  return std::accumulate(distances.begin(), distances.begin() + k, 0.)/(k-1);
 }
 
 
@@ -162,7 +164,7 @@ std::vector<std::pair<unsigned int, unsigned int>> epipolar_neighbors_in_ball(
         PointType point = {x_coords.get(row, col),
                            y_coords.get(row, col),
                            z_coords.get(row, col)};
-        if (squared_euclidian_distance(point, ref_point) < squared_radius)
+        if (squared_euclidian_distance(point, ref_point) <= squared_radius)
         {
           neighbors.push_back({row, col});
         }

@@ -38,6 +38,136 @@ EPIPOLAR_Y_IMAGE = osp.join(DATA_FOLDER, "Y.tif")
 EPIPOLAR_Z_IMAGE = osp.join(DATA_FOLDER, "Z.tif")
 
 
+@pytest.mark.unit_tests
+def test_detect_small_components():
+    """
+    Create fake cloud to process and test detect_small_components
+    """
+    x_coord = np.zeros((5, 5))
+    x_coord[4, 4] = 20
+    x_coord[0, 4] = 19.55
+    x_coord[0, 3] = 19.10
+    y_coord = np.zeros((5, 5))
+
+    z_coord = np.zeros((5, 5))
+    z_coord[0:2, 0:2] = 10
+    z_coord[1, 1] = 12
+
+    cloud_arr = np.concatenate(
+        [
+            np.stack((x_coord, y_coord, z_coord), axis=-1).reshape(-1, 3)
+            for x_coord, y_coord, z_coord in zip(  # noqa: B905
+                x_coord, y_coord, z_coord
+            )
+        ],
+        axis=0,
+    )
+
+    indexes_to_filter = outlier_filter.pc_small_components_outlier_filtering(
+        cloud_arr[:, 0], cloud_arr[:, 1], cloud_arr[:, 2], 0.5, 10, 2
+    )
+    assert sorted(indexes_to_filter) == [3, 4, 24]
+
+    # test without the second level of filtering
+    indexes_to_filter = outlier_filter.pc_small_components_outlier_filtering(
+        cloud_arr[:, 0], cloud_arr[:, 1], cloud_arr[:, 2], 0.5, 10, np.nan
+    )
+    assert sorted(indexes_to_filter) == [0, 1, 3, 4, 5, 6, 24]
+
+
+@pytest.mark.unit_tests
+def test_detect_statistical_outliers():
+    """
+    Create fake cloud to process and test detect_statistical_outliers
+    """
+    x_coord = np.zeros((5, 6))
+    off = 0
+    for line in range(5):
+        # x[line,:] = np.arange(off, off+(line+1)*5, line+1)
+        last_val = off + 5
+        x_coord[line, :5] = np.arange(off, last_val)
+        off += (line + 2 + 1) * 5
+
+        # outlier
+        x_coord[line, 5] = (off + last_val - 1) / 2
+
+    y_coord = np.zeros((5, 6))
+    z_coord = np.zeros((5, 6))
+
+    ref_cloud = np.concatenate(
+        [
+            np.stack((x_coord, y_coord, z_coord), axis=-1).reshape(-1, 3)
+            for x_coord, y_coord, z_coord in zip(  # noqa: B905
+                x_coord, y_coord, z_coord
+            )
+        ],
+        axis=0,
+    )
+
+    removed_elt_pos = outlier_filter.pc_statistical_outlier_filtering(
+        ref_cloud[:, 0],
+        ref_cloud[:, 1],
+        ref_cloud[:, 2],
+        k=4,
+        dev_factor=0.0,
+        use_median=False,
+    )
+    assert sorted(removed_elt_pos) == [5, 11, 17, 23, 29]
+
+    removed_elt_pos = outlier_filter.pc_statistical_outlier_filtering(
+        ref_cloud[:, 0],
+        ref_cloud[:, 1],
+        ref_cloud[:, 2],
+        k=4,
+        dev_factor=1.0,
+        use_median=False,
+    )
+    assert sorted(removed_elt_pos) == [11, 17, 23, 29]
+
+    removed_elt_pos = outlier_filter.pc_statistical_outlier_filtering(
+        ref_cloud[:, 0],
+        ref_cloud[:, 1],
+        ref_cloud[:, 2],
+        k=4,
+        dev_factor=2.0,
+        use_median=False,
+    )
+    assert sorted(removed_elt_pos) == [23, 29]
+
+    removed_elt_pos = outlier_filter.pc_statistical_outlier_filtering(
+        ref_cloud[:, 0],
+        ref_cloud[:, 1],
+        ref_cloud[:, 2],
+        k=4,
+        dev_factor=1.0,
+        use_median=True,
+    )
+    assert sorted(removed_elt_pos) == [5, 11, 17, 23, 29]
+
+    removed_elt_pos = outlier_filter.pc_statistical_outlier_filtering(
+        ref_cloud[:, 0],
+        ref_cloud[:, 1],
+        ref_cloud[:, 2],
+        k=4,
+        dev_factor=7.0,
+        use_median=True,
+    )
+    assert sorted(removed_elt_pos) == [11, 17, 23, 29]
+
+    removed_elt_pos = outlier_filter.pc_statistical_outlier_filtering(
+        ref_cloud[:, 0],
+        ref_cloud[:, 1],
+        ref_cloud[:, 2],
+        k=4,
+        dev_factor=15.0,
+        use_median=True,
+    )
+    # Note: This is the expected result if median computation was exact, but it
+    # is not the case in this implementation.
+    # assert sorted(removed_elt_pos) == [23, 29]
+    assert sorted(removed_elt_pos) == [29]
+
+
 @pytest.mark.parametrize("use_median", [True, False])
 def test_point_cloud_statistical(use_median):
     """
@@ -68,7 +198,7 @@ def test_point_cloud_statistical(use_median):
     scipy_start = datetime.datetime.now()
     # mimic what is in outlier_removing_tools
     cloud_tree = cKDTree(transposed_points)
-    neighbors_distances, _ = cloud_tree.query(transposed_points, k)
+    neighbors_distances, _ = cloud_tree.query(transposed_points, k + 1)
     mean_neighbors_distances = np.sum(neighbors_distances, axis=1)
     mean_neighbors_distances /= k
     # compute median and interquartile range of those mean distances
@@ -89,6 +219,8 @@ def test_point_cloud_statistical(use_median):
         # compute distance threshold and
         # apply it to determine which points will be removed
         dist_thresh = mean_distances + dev_factor * std_distances
+
+    print(f"dist_thresh {dist_thresh}")
 
     points_to_remove = np.argwhere(mean_neighbors_distances > dist_thresh)
 
@@ -239,7 +371,7 @@ def test_epipolar_statistical_filtering(use_median):
     statistical method
     """
     k = 15
-    half_window_size = 10
+    half_window_size = 15
     dev_factor = 1
 
     with rasterio.open(EPIPOLAR_X_IMAGE) as x_ds, rasterio.open(
