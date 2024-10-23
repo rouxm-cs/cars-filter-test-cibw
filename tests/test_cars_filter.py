@@ -38,19 +38,6 @@ EPIPOLAR_Y_IMAGE = osp.join(DATA_FOLDER, "Y.tif")
 EPIPOLAR_Z_IMAGE = osp.join(DATA_FOLDER, "Z.tif")
 
 
-def test_synthetic():
-    """
-    Test outlier filtering on small synthetic data
-    """
-    print("test synthetic !")
-    # synthetic_array = [
-    #     [10.2, 10.5, 10.4, 10.8, 10.9, 10.2, 10.3, 10.1],
-    #     [20.2, 20.5, 20.4, 20.8, 20.9, 20.2, 20.3, 20.1],
-    #     [30.2, 30.5, 30.4, 30.8, 30.9, 30.2, 30.3, 30.1],
-    # ]
-    # outlier_filter.pc_outlier_filtering(synthetic_array)
-
-
 @pytest.mark.parametrize("use_median", [True, False])
 def test_point_cloud_statistical(use_median):
     """
@@ -121,33 +108,40 @@ def test_point_cloud_statistical(use_median):
     print(f"Scipy and cars filter results are the same ? {is_same_result}")
 
 
-def test_point_cloud_small_component():
+@pytest.mark.parametrize("clusters_distance_threshold", [float("nan"), 4])
+def test_point_cloud_small_component(clusters_distance_threshold):
     """
     Outlier filtering test from laz, using small components method.
 
     The test verifies that cars-filter produces the same results as a Python
     equivalent using scipy ckdtrees
     """
+
+    connection_val = 3
+    nb_pts_threshold = 15
+
     with laspy.open(NIMES_LAZ) as creader:
         las = creader.read()
         points = np.vstack((las.x, las.y, las.z))
 
     start_time = datetime.datetime.now()
-    result_cpp = outlier_filter.pc_outlier_filtering(
-        las.x, las.y, las.z, "small_components_filtering"
+    result_cpp = outlier_filter.pc_small_components_outlier_filtering(
+        las.x,
+        las.y,
+        las.z,
+        connection_val,
+        nb_pts_threshold,
+        clusters_distance_threshold,
     )
     end_time = datetime.datetime.now()
     cpp_duration = end_time - start_time
 
     print(f"Small Component filtering total duration (cpp): {cpp_duration}")
+    print(f"result_cpp: {result_cpp}")
 
     transposed_points = np.transpose(points)
 
     scipy_start = datetime.datetime.now()
-
-    connection_val = 3
-    clusters_distance_threshold = None
-    nb_pts_threshold = 15
 
     # mimic what is in outlier_removing_tools
     cloud_tree = cKDTree(transposed_points)
@@ -198,26 +192,25 @@ def test_point_cloud_small_component():
             if clusters_distance_threshold is not None:
                 # search if the current cluster has any neighbors
                 # in the clusters_distance_threshold radius
-                print("TODO")
-                # all_neighbors = cloud_tree.query_ball_point(
-                #     cloud_xyz[connected_components_item],
-                #     clusters_distance_threshold,
-                # )
+                all_neighbors = cloud_tree.query_ball_point(
+                    transposed_points[connected_components_item],
+                    clusters_distance_threshold,
+                )
 
-                # # flatten neighbors
-                # new_neighbors = []
-                # for neighbor_item in all_neighbors:
-                #     new_neighbors.extend(neighbor_item)
+                # flatten neighbors
+                new_neighbors = []
+                for neighbor_item in all_neighbors:
+                    new_neighbors.extend(neighbor_item)
 
-                # # retrieve only new neighbors
-                # neighbors_list = list(
-                #     set(new_neighbors) - set(connected_components_item)
-                # )
+                # retrieve only new neighbors
+                neighbors_list = list(
+                    set(new_neighbors) - set(connected_components_item)
+                )
 
-                # # if there are no new neighbors, the cluster will be
-                # # removed
-                # if len(neighbors_list) == 0:
-                #     cluster_to_remove.extend(connected_components_item)
+                # if there are no new neighbors, the cluster will be
+                # removed
+                if len(neighbors_list) == 0:
+                    cluster_to_remove.extend(connected_components_item)
             else:
                 cluster_to_remove.extend(connected_components_item)
 
@@ -226,20 +219,27 @@ def test_point_cloud_small_component():
     print(
         f"Small Component filtering total duration (Python): {scipy_duration}"
     )
+
+    cluster_to_remove.sort()
+    result_cpp.sort()
+
     print(f"python {cluster_to_remove}")
     print(f"result_cpp {result_cpp}")
 
-    is_same_result = cluster_to_remove.sort() == result_cpp.sort()
+    is_same_result = cluster_to_remove == result_cpp
+
+    assert is_same_result
     print(f"Scipy and cars filter results are the same ? {is_same_result}")
 
 
-def test_epipolar_statistical_filtering():
+@pytest.mark.parametrize("use_median", [True, False])
+def test_epipolar_statistical_filtering(use_median):
     """
     Outlier filtering test from depth map in epipolar geometry, using
     statistical method
     """
     k = 15
-    half_window_size = 15
+    half_window_size = 10
     dev_factor = 1
 
     with rasterio.open(EPIPOLAR_X_IMAGE) as x_ds, rasterio.open(
@@ -261,54 +261,62 @@ def test_epipolar_statistical_filtering():
     y_utm_flat = np.copy(y_utm).reshape(input_shape[0] * input_shape[1])
     z_flat = np.copy(z_values).reshape(input_shape[0] * input_shape[1])
 
+    start_time = datetime.datetime.now()
+
     outlier_array = outlier_filter.epipolar_statistical_outlier_filtering(
-        x_utm, y_utm, z_values, k, half_window_size, dev_factor
+        x_utm, y_utm, z_values, k, half_window_size, dev_factor, use_median
     )
 
-    print(outlier_array)
+    end_time = datetime.datetime.now()
+    epipolar_processing_duration = end_time - start_time
 
-    # remove NaNs
+    print(f"Epipolar filtering duration: {epipolar_processing_duration}")
+
+    # filter NaNs
     nan_pos = np.isnan(x_utm_flat)
     x_utm_flat = x_utm_flat[~nan_pos]
     y_utm_flat = y_utm_flat[~nan_pos]
     z_flat = z_flat[~nan_pos]
 
-    print(x_utm_flat)
-    print(y_utm_flat)
-    print(z_flat)
+    start_time = datetime.datetime.now()
 
     result_kdtree = np.array(
         outlier_filter.pc_statistical_outlier_filtering(
-            x_utm_flat, y_utm_flat, z_flat, dev_factor, k, False
+            x_utm_flat, y_utm_flat, z_flat, dev_factor, k, use_median
         )
     )
 
-    print(f"result_kdtree {result_kdtree}")
+    end_time = datetime.datetime.now()
+    kdtree_processing_duration = end_time - start_time
+    print(f"KDTree filtering duration: {kdtree_processing_duration}")
 
     print(outlier_array.shape)
 
     outlier_array = outlier_array.reshape(input_shape[0] * input_shape[1])
     print(outlier_array.shape)
-    outlier_array = np.argwhere(outlier_array[~nan_pos])
+    outlier_array = np.argwhere(outlier_array[~nan_pos]).flatten()
     print(outlier_array.shape)
-    print(f"outlier_array {outlier_array}")
-    print(f"nan pos {nan_pos}")
 
     # Find common outliers between the two methods
-    common_outliers = np.intersect1d(result_kdtree, outlier_array)
+    # common_outliers = np.intersect1d(result_kdtree, outlier_array)
+    # print(common_outliers)
 
-    # No assert because the methods does not produce exactly the same results
-    print(common_outliers)
+    # Note that k and half_window_size have been chosed for this assertion to
+    # succeed.
+    # The two algorithms does not produce the same results if the epipolar
+    # neighborhood is too small.
+    assert (np.sort(outlier_array) == np.sort(result_kdtree)).all()
 
 
-def test_epipolar_small_components_filtering():
+@pytest.mark.parametrize("clusters_distance_threshold", [float("nan"), 2])
+def test_epipolar_small_components_filtering(clusters_distance_threshold):
     """
     Outlier filtering test from depth map in epipolar geometry, using small
     components method
     """
     min_cluster_size = 15
-    radius = 3
-    half_window_size = 15
+    radius = 1
+    half_window_size = 7
 
     with rasterio.open(EPIPOLAR_X_IMAGE) as x_ds, rasterio.open(
         EPIPOLAR_Y_IMAGE
@@ -317,13 +325,66 @@ def test_epipolar_small_components_filtering():
         y_values = y_ds.read(1)
         z_values = z_ds.read(1)
 
-    # hard code UTM 36N for Gizeh for now
+    input_shape = x_values.shape
+
     transformer = pyproj.Transformer.from_crs(4326, 32636)
     # X-Y inversion required because WGS84 is lat first ?
     x_utm, y_utm = transformer.transform(x_values, y_values)
 
+    # Make copies for reprocessing with kdtree
+    x_utm_flat = np.copy(x_utm).reshape(input_shape[0] * input_shape[1])
+    y_utm_flat = np.copy(y_utm).reshape(input_shape[0] * input_shape[1])
+    z_flat = np.copy(z_values).reshape(input_shape[0] * input_shape[1])
+
+    start_time = datetime.datetime.now()
+
     outlier_array = outlier_filter.epipolar_small_components_outlier_filtering(
-        x_utm, y_utm, z_values, min_cluster_size, radius, half_window_size
+        x_utm,
+        y_utm,
+        z_values,
+        min_cluster_size,
+        radius,
+        half_window_size,
+        clusters_distance_threshold,
     )
 
-    print(outlier_array)
+    end_time = datetime.datetime.now()
+    epipolar_processing_duration = end_time - start_time
+
+    print(f"Epipolar filtering duration: {epipolar_processing_duration}")
+
+    # Test with KDTree
+
+    # filter NaNs
+    nan_pos = np.isnan(x_utm_flat)
+    x_utm_flat = x_utm_flat[~nan_pos]
+    y_utm_flat = y_utm_flat[~nan_pos]
+    z_flat = z_flat[~nan_pos]
+
+    start_time = datetime.datetime.now()
+
+    result_kdtree = np.array(
+        outlier_filter.pc_small_components_outlier_filtering(
+            x_utm_flat,
+            y_utm_flat,
+            z_flat,
+            radius,
+            min_cluster_size,
+            clusters_distance_threshold,
+        )
+    )
+
+    end_time = datetime.datetime.now()
+    kdtree_processing_duration = end_time - start_time
+
+    print(f"KDTree filtering duration: {kdtree_processing_duration}")
+
+    outlier_array = outlier_array.reshape(input_shape[0] * input_shape[1])
+    print(outlier_array.shape)
+    outlier_array = np.argwhere(outlier_array[~nan_pos]).flatten()
+    print(outlier_array.shape)
+    # Find common outliers between the two methods
+    # common_outliers = np.intersect1d(result_kdtree, outlier_array)
+    # print(common_outliers)
+
+    assert (np.sort(outlier_array) == np.sort(result_kdtree)).all()

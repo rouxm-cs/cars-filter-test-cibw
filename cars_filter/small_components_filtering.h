@@ -26,14 +26,28 @@
 namespace cars_filter
 {
 
-
-std::vector<unsigned int> point_cloud_small_components_filtering_v2(
-                                                          double* x_coords,
-                                                          double* y_coords,
-                                                          double* z_coords,
-                                                        const unsigned int num_elem,
-                                                        const double radius = 3,
-                                                        const int min_cluster_size = 15)
+/*
+*
+* \brief Filter a point cloud using the small component method
+*
+* \param x_coords array containing the x triangulated coordinates
+* \param y_coords array containing the y triangulated coordinates
+* \param z_coords array containing the altitudes
+* \param num_elem number of points in the cloud
+* \param radius points are considered connected if their euclidian distance is less than radius
+* \param min_cluster_size cluster with less than min_cluster_size will be marked as outliers
+* \param clusters_distance_threshold a cluster will not be removed if it has a neighbor within this distance
+*
+*/
+std::vector<unsigned int> point_cloud_small_components_filtering(
+    double* x_coords,
+    double* y_coords,
+    double* z_coords,
+    const unsigned int num_elem,
+    const double radius = 3,
+    const int min_cluster_size = 15,
+    const double clusters_distance_threshold = std::numeric_limits<double>::quiet_NaN()
+)
 {
   auto input_point_cloud = PointCloud(x_coords, y_coords, z_coords, num_elem);
 
@@ -65,7 +79,7 @@ std::vector<unsigned int> point_cloud_small_components_filtering_v2(
       }
 
       // Get the neighbors of the point
-      auto neighbor_list = tree.epipolar_neighbors_in_ball(input_point_cloud.m_x[idx], 
+      auto neighbor_list = tree.neighbors_in_ball(input_point_cloud.m_x[idx], 
                      input_point_cloud.m_y[idx],
                      input_point_cloud.m_z[idx],
                      radius);
@@ -80,12 +94,11 @@ std::vector<unsigned int> point_cloud_small_components_filtering_v2(
 
       while (!neighbor_list.empty())
       {
-
         auto current_idx = neighbor_list.back();
         neighbor_list.pop_back();
 
         // visited_points[current_idx] = true;
-        auto new_neighbors = tree.epipolar_neighbors_in_ball(input_point_cloud.m_x[current_idx], 
+        auto new_neighbors = tree.neighbors_in_ball(input_point_cloud.m_x[current_idx], 
                      input_point_cloud.m_y[current_idx],
                      input_point_cloud.m_z[current_idx],
                      radius);
@@ -104,9 +117,49 @@ std::vector<unsigned int> point_cloud_small_components_filtering_v2(
 
       if (seed.size() < min_cluster_size)
       {
-        for (auto elem: seed)
+        if (std::isnan(clusters_distance_threshold))
         {
-          result.push_back(elem);
+          for (auto elem: seed)
+          {
+            result.push_back(elem);
+          }
+        }
+        else
+        {
+          // search if the current cluster has any neighbors in the 
+          // clusters_distance_threshold radius
+          bool neighbor_found = false;
+          for (auto current_idx_it = seed.begin(); current_idx_it != seed.end() && !neighbor_found; current_idx_it++)
+          {
+            // Optimization note: it would probably be more efficient to mask
+            // the pixels in the epipolar neighborhood that also are in the 
+            // current cluster, to avoid computing some euclidian distances.
+            // This have not been implemented because only a few points should 
+            // be processed here, in comparison to the full algorithm and 
+            // therefore should not be that imapctful.
+            auto new_neighbors = tree.neighbors_in_ball(input_point_cloud.m_x[*current_idx_it],
+                                                        input_point_cloud.m_y[*current_idx_it],
+                                                        input_point_cloud.m_z[*current_idx_it],
+                                                        clusters_distance_threshold);
+            
+            // Check neighbors of current point and check the set to know if a 
+            // new neighbour is found
+            for (auto elem: new_neighbors)
+            {
+              if (!seed.count(elem))
+              {
+                neighbor_found = true;
+                break;
+              }
+            }
+          }
+          if (!neighbor_found)
+          {
+            for (auto elem: seed)
+            {
+              result.push_back(elem);
+            }
+          }
         }
       }
     }
@@ -115,92 +168,30 @@ std::vector<unsigned int> point_cloud_small_components_filtering_v2(
 }
 
 
-std::vector<unsigned int> point_cloud_small_components_filtering(
-                                                          double* x_coords,
-                                                          double* y_coords,
-                                                          double* z_coords,
-                                                        unsigned int num_elem)
+/*
+*
+* \brief Filter an epipolar depth map using the small components method
+*
+* \param x_coords Image in epipolar geometry containing the x triangulated coordinates
+* \param y_coords Image in epipolar geometry containing the y triangulated coordinates
+* \param z_coords Image in epipolar geometry containing the z triangulated coordinates
+* \param outlier_array output outlier mask (true = outlier)
+* \param min_cluster_size cluster with less than min_cluster_size will be marked as outliers
+* \param radius points are considered connected if their euclidian distance is less than radius
+* \param half window size half size of the epipolar search window (in rows and columns)
+* \param clusters_distance_threshold a cluster will not be removed if it has a neighbor within this distance
+*
+*/
+void epipolar_small_components_filtering(
+    Image<double>& x_coords,
+    Image<double>& y_coords,
+    Image<double>& z_coords,
+    Image<double>& outlier_array,
+    const unsigned int min_cluster_size = 15,
+    const double radius = 10,
+    const unsigned int half_window_size = 5,
+    const double clusters_distance_threshold = std::numeric_limits<double>::quiet_NaN())
 {
-
-  auto input_point_cloud = PointCloud(x_coords, y_coords, z_coords, num_elem);
-
-  auto tree = KDTree(input_point_cloud, 5);
-
-  double radius = 3;
-  unsigned int min_cluster_size = 15;
-
-  std::vector<unsigned int> visited_points(num_elem, 0);
-
-  std::vector<unsigned int> clusters;
-
-  std::vector<unsigned int> result;
-
-  for (unsigned int i=0; i< input_point_cloud.size(); i++)
-  {
-    if (visited_points[tree.getNodes()[i].m_idx])
-    {
-      continue;
-    }
-    clusters.push_back(tree.getNodes()[i].m_idx);
-
-    // if (visited_points[i])
-    // {
-    //   continue;
-    // }
-    // clusters.push_back(i);
-
-    std::vector<unsigned int> current_cluster;
-    visited_points[ clusters.back()] = true;
-    while (!clusters.empty())
-    {
-      auto current_idx = clusters.back();
-
-      clusters.pop_back();
-      // if (visited_points[current_idx])
-      // {
-      //   continue;
-      // }
-      current_cluster.push_back(current_idx);
-      // visited_points[current_idx] = true;
-      auto neighbors = tree.epipolar_neighbors_in_ball(input_point_cloud.m_x[current_idx], 
-                   input_point_cloud.m_y[current_idx],
-                   input_point_cloud.m_z[current_idx],
-                   radius);
-      //clusters.reserve(clusters.size() + neighbors.size());
-      for (auto idx : neighbors)
-      {
-        if (!visited_points[idx])
-        {
-          visited_points[idx] = true;
-          clusters.push_back(idx);
-        }
-      }
-    }
-
-    if (current_cluster.size() < min_cluster_size)
-    {
-      for (auto elem: current_cluster)
-      {
-        result.push_back(elem);
-      }
-    }
-  }
-
-  return result;
-}
-
-
-void epipolar_small_components_filtering(Image<double>& x_coords,
-                                         Image<double>& y_coords,
-                                         Image<double>& z_coords,
-                                         Image<double>& outlier_array,
-                                         const unsigned int min_cluster_size = 15,
-                                         const double radius = 10,
-                                         const unsigned int half_window_size = 5)
-{
-
-  std::cout << "In epipolar_small_components_filtering" << std::endl;
-
   InMemoryImage<double> visited_pixels(x_coords.number_of_rows(), x_coords.number_of_cols());
 
   std::vector<std::pair<unsigned int, unsigned int>> clusters;
@@ -216,6 +207,8 @@ void epipolar_small_components_filtering(Image<double>& x_coords,
 
       clusters.push_back({row,col});
 
+      // unordered set might be more efficient, but std pair is not hashable
+      // so it would require to work with one index instead of row/col
       std::vector<std::pair<unsigned int, unsigned int>> current_cluster;
       while (!clusters.empty())
       {
@@ -228,7 +221,7 @@ void epipolar_small_components_filtering(Image<double>& x_coords,
         }
         current_cluster.push_back({ref_row, ref_col});
         is_ref_visted = true;
-        auto neighbors = (epipolar_neighbors_in_ball(x_coords, y_coords, z_coords, ref_row, ref_col, radius, half_window_size));
+        auto neighbors = epipolar_neighbors_in_ball(x_coords, y_coords, z_coords, ref_row, ref_col, radius, half_window_size);
 
         //clusters.reserve(clusters.size() + neighbors.size());
         for (const auto& [elem_row, elem_col] :neighbors)
@@ -238,14 +231,12 @@ void epipolar_small_components_filtering(Image<double>& x_coords,
             clusters.push_back({elem_row, elem_col});
           }
         }
-        //clusters.insert(clusters.end(), neighbors.begin(), neighbors.end());
       }
 
-      if (!current_cluster.empty())
+      if (!current_cluster.empty() && current_cluster.size() < min_cluster_size)
       {
-        if (current_cluster.size() < min_cluster_size)
+        if (std::isnan(clusters_distance_threshold))
         {
-          std::cout << "removed current_cluster size" << current_cluster.size() << std::endl;
           for (const auto& [elem_row, elem_col]:current_cluster)
           {
             outlier_array.get(elem_row, elem_col) = current_cluster.size();
@@ -253,10 +244,30 @@ void epipolar_small_components_filtering(Image<double>& x_coords,
         }
         else
         {
-          std::cout << "current_cluster size" << current_cluster.size() << std::endl;
-          for (const auto& [elem_row, elem_col]:current_cluster)
+          bool neighbor_found = false;
+          for (auto current_idx_it = current_cluster.begin(); current_idx_it != current_cluster.end() && !neighbor_found; current_idx_it++)
           {
-            outlier_array.get(elem_row, elem_col) = current_cluster.size();
+            auto& [row, col] = *current_idx_it;
+            auto neighbors = epipolar_neighbors_in_ball(x_coords, y_coords, z_coords, row, col, clusters_distance_threshold, half_window_size);
+            for (auto& item: neighbors)
+            {
+              // Check if the new neighbor is already in the current neighborhood
+              if (std::find(current_cluster.begin(), current_cluster.end(), item) == current_cluster.end())
+              {
+                neighbor_found = true;
+                break;
+              }
+
+
+            }
+
+          }
+          if (!neighbor_found)
+          {
+            for (const auto& [elem_row, elem_col]:current_cluster)
+            {
+              outlier_array.get(elem_row, elem_col) = current_cluster.size();
+            }
           }
         }
       }

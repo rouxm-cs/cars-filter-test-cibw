@@ -34,12 +34,10 @@ namespace cars_filter
 template<typename T>
 std::tuple<T, T, T> compute_median(std::vector<T> input_data)
 {
-  std::cout << "compute median" << std::endl;
   unsigned int size = input_data.size();
   unsigned int first_quarter_pos = static_cast<unsigned int>(size/4);
   unsigned int half_pos = static_cast<unsigned int>(size/2);
   unsigned int third_quarter_pos = first_quarter_pos + half_pos;
-  std::cout << "input data sizes" << size << " " << first_quarter_pos << " " << half_pos << " " << third_quarter_pos << std::endl;
 
   // Split the container at the median
   std::nth_element(input_data.begin(),
@@ -136,8 +134,6 @@ std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
   {
     auto [percentile_25, median, percentile_75] = compute_median(mean_distances);
     double interquartile_distance = percentile_75 - percentile_25;
-
-    std::cout << "computed percentiles " << percentile_25 << " " << median << " " << percentile_75 << std::endl;
     dist_thresh = median + dev_factor * interquartile_distance;
   }
   else
@@ -152,8 +148,6 @@ std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
 
     const double var = std::accumulate(mean_distances.begin(), mean_distances.end(), 0.0, variance_lambda)/num_elem;
     const double stddev = std::sqrt(var);
-
-    std::cout << "computed statistics " << mean << " " << var << " " << stddev << std::endl;
 
     dist_thresh = mean + dev_factor * stddev;
   }
@@ -180,7 +174,8 @@ void epipolar_statistical_filtering(Image<double>& x_coords,
                                     Image<double>& outlier_array,
                                     const unsigned int k = 50,
                                     const unsigned int half_window_size = 15,
-                                    const double dev_factor = 1)
+                                    const double dev_factor = 1,
+                                    const double use_median = false)
 {
   InMemoryImage<double> mean_distance_image(x_coords.number_of_rows(), x_coords.number_of_cols());
 
@@ -193,49 +188,61 @@ void epipolar_statistical_filtering(Image<double>& x_coords,
     }
   }
 
-  // mean with number of valid pixel counting
-  unsigned int num_valid = 0;
-  auto mean_lambda = [&num_valid](double acc, double input)
+  double distance_threshold;
+
+  if (use_median)
   {
-    if (std::isnan(input))
-    {
-      return acc;
-    }
-    else
-    {
-      num_valid++;
-      return acc + input;
-    }
-  };
+    std::vector<double> mean_distances_no_nan;
+    std::copy_if(mean_distance_image.getData(), 
+                mean_distance_image.getData() + mean_distance_image.size(),
+                std::back_inserter(mean_distances_no_nan),
+                [](double elem){return !std::isnan(elem);});
+    auto [percentile_25, median, percentile_75] = compute_median(mean_distances_no_nan);
+    double interquartile_distance = percentile_75 - percentile_25;
 
-
-  auto mean = std::accumulate(mean_distance_image.getData(), mean_distance_image.getData()+mean_distance_image.size(), 0.,mean_lambda );
-  mean/=num_valid;
-
-  std::cout << "mean " << mean << std::endl;
-
-
-  // variance
-  auto variance_lambda = [mean](double acc, double input)
+    distance_threshold = median + dev_factor * interquartile_distance;
+  }
+  else
   {
-    if (std::isnan(input))
+    // mean with number of valid pixel counting
+    unsigned int num_valid = 0;
+    auto mean_lambda = [&num_valid](double acc, double input)
     {
-      return acc;
-    }
-    else
+      if (std::isnan(input))
+      {
+        return acc;
+      }
+      else
+      {
+        num_valid++;
+        return acc + input;
+      }
+    };
+
+    auto mean = std::accumulate(mean_distance_image.getData(), mean_distance_image.getData()+mean_distance_image.size(), 0., mean_lambda);
+    mean/=num_valid;
+
+    // variance (ignoring nan)
+    auto variance_lambda = [mean](double acc, double input)
     {
-      return acc + (input - mean)*(input - mean);
-    }
-  };
+      if (std::isnan(input))
+      {
+        return acc;
+      }
+      else
+      {
+        return acc + (input - mean)*(input - mean);
+      }
+    };
 
-  const double var = std::accumulate(mean_distance_image.getData(), mean_distance_image.getData()+mean_distance_image.size(), 0.0, variance_lambda)/num_valid;
-  const double stddev = std::sqrt(var);
+    const double var = std::accumulate(mean_distance_image.getData(),
+                                       mean_distance_image.getData() + mean_distance_image.size(),
+                                       0.,
+                                       variance_lambda) / num_valid;
+    const double stddev = std::sqrt(var);
 
-  std::cout << "var " << var << std::endl;
-
-
-  const double distance_threshold = mean + dev_factor * stddev;
-
+    distance_threshold = mean + dev_factor * stddev;
+  }
   std::cout << "distance_threshold " << distance_threshold << std::endl;
 
   for (unsigned int row=0; row < x_coords.number_of_rows(); row++)

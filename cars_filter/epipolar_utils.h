@@ -26,17 +26,24 @@
 namespace cars_filter
 {
 
-bool isnan(const PointType& point)
+/*
+* Check if a point is NaN
+* 
+* \param point Input point
+* \return true if any coordinate of the point is nan
+*
+*/
+inline bool isnan(const PointType& point)
 {
   return std::isnan(point[0]) || std::isnan(point[1]) || std::isnan(point[2]);
 }
 
-double squared_euclidian_distance(double x1, double y1, double z1, double x2, double y2, double z2)
+inline double squared_euclidian_distance(double x1, double y1, double z1, double x2, double y2, double z2)
 {
   return (x1-x2)*(x1-x2) + (y1-y2)*(y1-y2) + (z1-z2)*(z1-z2); 
 }
 
-double squared_euclidian_distance(const PointType& point1, const PointType& point2) 
+inline double squared_euclidian_distance(const PointType& point1, const PointType& point2) 
 {
   return squared_euclidian_distance(point1[0],
                             point1[1],
@@ -46,13 +53,18 @@ double squared_euclidian_distance(const PointType& point1, const PointType& poin
                             point2[2]);
 }
 
+/*
+* Find neighbors of point, in the sense of the euclian distance, inside a search
+* window of the epipolar window
+* 
+*/
 double epipolar_knn(const Image<double>& x_coords,
-                  const Image<double>& y_coords,
-                  const Image<double>& z_coords,
-                  unsigned int ref_row,
-                  unsigned int ref_col,
-                  unsigned int k,
-                  unsigned int half_window_size)
+                    const Image<double>& y_coords,
+                    const Image<double>& z_coords,
+                    unsigned int ref_row,
+                    unsigned int ref_col,
+                    unsigned int k,
+                    unsigned int half_window_size)
 {
   PointType ref_point = {x_coords.get(ref_row, ref_col),
                          y_coords.get(ref_row, ref_col),
@@ -68,8 +80,6 @@ double epipolar_knn(const Image<double>& x_coords,
   unsigned int end_row = std::min(x_coords.number_of_rows(), ref_row+half_window_size);
   unsigned int start_col = std::max(0, static_cast<int>(ref_col)-static_cast<int>(half_window_size));
   unsigned int end_col = std::min(x_coords.number_of_cols(), ref_col+half_window_size);
-
-  //std::cout << x_coords.get(ref_row, ref_col) << start_row << " " << end_row << " " << start_col << " " << end_col <<std::endl;
 
   std::vector<double> distances;
 
@@ -88,7 +98,7 @@ double epipolar_knn(const Image<double>& x_coords,
       }
     }
   }
-  // No enought valid points in the epipolar neighbordhood, return NaN
+  // No enough valid points in the epipolar neighbordhood, return NaN
   if (distances.size() < k)
   {
     return std::numeric_limits<double>::quiet_NaN();
@@ -104,16 +114,23 @@ double epipolar_knn(const Image<double>& x_coords,
                  [](double val){return std::sqrt(val);});
 
 
-  if (std::isnan(std::accumulate(distances.begin(), distances.begin() + k, 0.)/k))
-  {
-    std::cout << "wtf " << std::endl;
-  }
-
   // return mean of k first sorted distances
   return std::accumulate(distances.begin(), distances.begin() + k, 0.)/k;
 }
 
 
+/*
+* Find all points in a search window around the input point in epipolar geometry
+* 
+* \param x_coords Image in epipolar geometry containing the x triangulated coordinates
+* \param y_coords Image in epipolar geometry containing the y triangulated coordinates
+* \param z_coords Image in epipolar geometry containing the z triangulated coordinates
+* \param ref_row row of the point of interest
+* \param ref_col column of the point of interest
+* \param radius distance threshold defining if a point is in the neighborhood or not
+* \param half_window_size half size of the epipolar search window (in rows and columns) 
+* 
+*/
 std::vector<std::pair<unsigned int, unsigned int>> epipolar_neighbors_in_ball(
                                               const Image<double>& x_coords,
                                               const Image<double>& y_coords,
@@ -155,7 +172,5 @@ std::vector<std::pair<unsigned int, unsigned int>> epipolar_neighbors_in_ball(
 
   return neighbors;
 }
-
-
 
 }

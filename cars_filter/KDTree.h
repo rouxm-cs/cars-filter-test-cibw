@@ -36,7 +36,6 @@ using PointType = std::array<double, 3>;
 class PointCloud
 {
 public:
-  // TODO: duplicated with coords, left here for easier debugging
   double* m_x;
   double* m_y;
   double* m_z;
@@ -109,13 +108,22 @@ public:
     container_type &get_container() { return this->c; }
 };
 
-
+/*
+* \brief 3D KDTree implementation
+*
+* \details Implements a KDTree structure to perform spatial queries in a 3D 
+* point cloud. The tree is constructed from a point cloud and provide query
+* methods (KNN and radius based). Many implementations details are inspired
+* by Scipy CKDtree implementation 
+* (https://github.com/scipy/scipy/tree/main/scipy/spatial/ckdtree/src).
+* In particular, a leaf size can be provided to the constructor of the tree,
+* corresponding to the number of points stored on the leaf. When a leaf node is
+* reached, all point distances at the node are computed. This brute force
+* approach increases performances.
+*/
 class KDTree
 {
 public:
-  // typedef for a structure containing a node and its distance to a given point
-  //using NeighborNode = std::pair<KDNode*, double>;
-
   using KNeighborListBase = std::priority_queue<NeighborNode>;
   using KNeighborList = Adapter<KNeighborListBase>;
 
@@ -195,7 +203,7 @@ public:
 
   void processLeafBall(const PointType& point, KDNode* node, std::vector<unsigned int>& neighbors, double squared_radius);
 
-  std::vector<unsigned int> epipolar_neighbors_in_ball(double x, double y, double z, double radius);
+  std::vector<unsigned int> neighbors_in_ball(double x, double y, double z, double radius);
 
   std::vector<NeighborNode> findKNNIterative(double x, double y, double z, unsigned int k=1, KDNode* starting_node= nullptr);
 

@@ -33,20 +33,6 @@ template<typename T>
 cars_filter::Image<T> pyarray_to_image(py::array_t<T> input_array)
 {
   py::buffer_info info = input_array.request();
-
-  // TODO: remove debug info
-  std::cout << "info.itemsize " << info.itemsize << std::endl;
-  std::cout << "info.format " << info.format << std::endl;
-  std::cout << "info.ndim " << info.ndim << std::endl;
-
-  for (const auto& elem: info.shape)
-  {
-    std::cout << "shape " << elem << std::endl;
-  }
-  for (const auto& elem: info.strides)
-  {
-    std::cout << "strides " << elem << std::endl;
-  }
   return cars_filter::Image<T>(static_cast<T*>(info.ptr), info.shape[0], info.shape[1]);
 }
 
@@ -91,7 +77,8 @@ py::array_t<double, py::array::c_style> pyEpipolarStatisticalOutlierFiltering(
         py::array_t<double, py::array::c_style | py::array::forcecast>& z_values,
         const unsigned int k,
         const unsigned int half_window_size,
-        const double dev_factor
+        const double dev_factor,
+        const double use_median
 )
 {
   // Build image wrappers around numpy arrays
@@ -104,7 +91,7 @@ py::array_t<double, py::array::c_style> pyEpipolarStatisticalOutlierFiltering(
                                                         {x_image.number_of_cols() * sizeof(double),  sizeof(double)});
   auto outlier_image = pyarray_to_image<double>(outlier_array);
 
-  epipolar_statistical_filtering(x_image, y_image, z_image, outlier_image, k, half_window_size, dev_factor);
+  epipolar_statistical_filtering(x_image, y_image, z_image, outlier_image, k, half_window_size, dev_factor, use_median);
 
   return outlier_array;
 }
@@ -117,7 +104,8 @@ py::array_t<double, py::array::c_style> pyEpipolarSmallComponentsOutlierFilterin
         py::array_t<double, py::array::c_style | py::array::forcecast>& z_values,
         const unsigned int min_cluster_size = 15,
         const double radius = 10,
-        const unsigned int half_window_size = 5
+        const unsigned int half_window_size = 5,
+        const double clusters_distance_threshold = 4
 )
 {
   // Build image wrappers around numpy arrays
@@ -132,7 +120,7 @@ py::array_t<double, py::array::c_style> pyEpipolarSmallComponentsOutlierFilterin
                                                         {x_image.number_of_cols() * sizeof(double),  sizeof(double)});
   auto outlier_image = pyarray_to_image<double>(outlier_array);
 
-  epipolar_small_components_filtering(x_image, y_image, z_image, outlier_image, min_cluster_size, radius, half_window_size);
+  epipolar_small_components_filtering(x_image, y_image, z_image, outlier_image, min_cluster_size, radius, half_window_size, clusters_distance_threshold);
 
   return outlier_array;
 }
@@ -175,8 +163,10 @@ py::list pyPointCloudSmallComponentsOutlierFiltering(py::array_t<double,
           py::array_t<double,
           py::array::c_style | py::array::forcecast> z_array,
           const double radius = 3,
-          const unsigned int min_cluster_size = 15)
+          const unsigned int min_cluster_size = 15,
+          const double clusters_distance_threshold = 4)
 {
+  std::cout << radius << " " << min_cluster_size << std::endl;
   /* Request a buffer descriptor from Python */
   py::buffer_info x_info = x_array.request();
   auto x_coords = static_cast<double *>(x_info.ptr);
@@ -187,60 +177,21 @@ py::list pyPointCloudSmallComponentsOutlierFiltering(py::array_t<double,
   py::buffer_info z_info = z_array.request();
   auto z_coords = static_cast<double *>(z_info.ptr);
 
-  auto result = cars_filter::point_cloud_small_components_filtering_v2(x_coords, y_coords, z_coords, x_info.shape[0], radius, min_cluster_size);
+  auto result = cars_filter::point_cloud_small_components_filtering(
+                                        x_coords,
+                                        y_coords,
+                                        z_coords,
+                                        x_info.shape[0],
+                                        radius,
+                                        min_cluster_size,
+                                        clusters_distance_threshold
+                                        );
 
   // Copy C++ vector to Python list
   // As result has variable length, I am not sure if the copy can be avoided here in pyBind
   return py::cast(result);
 }
 
-
-py::list pyOutlierFiltering(py::array_t<double,
-          py::array::c_style | py::array::forcecast> x_array,
-          py::array_t<double,
-          py::array::c_style | py::array::forcecast> y_array,
-          py::array_t<double,
-          py::array::c_style | py::array::forcecast> z_array,
-          const std::string& method)
-{
-  /* Request a buffer descriptor from Python */
-  py::buffer_info x_info = x_array.request();
-  auto x_coords = static_cast<double *>(x_info.ptr);
-
-  py::buffer_info y_info = y_array.request();
-  auto y_coords = static_cast<double *>(y_info.ptr);
-
-  py::buffer_info z_info = z_array.request();
-  auto z_coords = static_cast<double *>(z_info.ptr);
-
-  // TODO: remove debug info
-  std::cout << "info.itemsize " << x_info.itemsize << std::endl;
-  std::cout << "info.format " << x_info.format << std::endl;
-  std::cout << "info.ndim " << x_info.ndim << std::endl;
-
-  for (const auto& elem: x_info.shape)
-  {
-    std::cout << "shape " << elem << std::endl;
-  }
-  for (const auto& elem: x_info.strides)
-  {
-    std::cout << "strides " << elem << std::endl;
-  }
-
-  std::vector<unsigned int> result;
-  if (method == "statistical_filtering")
-  {
-    result = cars_filter::statistical_filtering(x_coords, y_coords, z_coords, x_info.shape[0]);
-  }
-  else if (method == "small_components_filtering")
-  {
-    result = cars_filter::point_cloud_small_components_filtering_v2(x_coords, y_coords, z_coords, x_info.shape[0]);
-  }
-
-  // Copy C++ vector to Python list
-  // As result has variable length, I am not sure if the copy can be avoided here in pyBind
-  return py::cast(result);
-}
 
 
 
@@ -248,7 +199,6 @@ py::list pyOutlierFiltering(py::array_t<double,
 PYBIND11_MODULE(outlier_filter, m)
 {
   m.doc() = "filter";
-  m.def("pc_outlier_filtering", &pyOutlierFiltering, "Filter outliers from point cloud");
   m.def("pc_small_components_outlier_filtering",
         &pyPointCloudSmallComponentsOutlierFiltering,
         "Filter outliers from point cloud using statistical method"
@@ -261,11 +211,13 @@ PYBIND11_MODULE(outlier_filter, m)
 
   m.def("epipolar_small_components_outlier_filtering",
         &pyEpipolarSmallComponentsOutlierFiltering,
-        "Filter outliers from depth map in epipolar geometry"
+        "Filter outliers from depth map in epipolar geometry",
+        py::return_value_policy::take_ownership
         );
 
   m.def("epipolar_statistical_outlier_filtering",
         &pyEpipolarStatisticalOutlierFiltering,
-        "Filter outliers from depth map in epipolar geometry"
+        "Filter outliers from depth map in epipolar geometry",
+        py::return_value_policy::take_ownership
         );
 }

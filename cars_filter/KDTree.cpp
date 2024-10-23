@@ -19,10 +19,10 @@
 namespace cars_filter
 {
 
-std::vector<unsigned int> KDTree::epipolar_neighbors_in_ball(double x,
-                                                             double y,
-                                                             double z,
-                                                             double radius)
+std::vector<unsigned int> KDTree::neighbors_in_ball(double x,
+                                                    double y,
+                                                    double z,
+                                                    double radius)
 {
   PointType point = {x, y, z};
   const double squared_radius = radius * radius;
