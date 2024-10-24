@@ -35,9 +35,9 @@ cars_filter::Image<T> pyarray_to_image(py::array_t<T> input_array)
 
 
 py::array_t<double, py::array::c_style> pyEpipolarStatisticalOutlierFiltering(
-        py::array_t<double, py::array::c_style | py::array::forcecast>& x_values,
-        py::array_t<double, py::array::c_style | py::array::forcecast>& y_values,
-        py::array_t<double, py::array::c_style | py::array::forcecast>& z_values,
+        py::array_t<double, py::array::c_style>& x_values,
+        py::array_t<double, py::array::c_style>& y_values,
+        py::array_t<double, py::array::c_style>& z_values,
         const unsigned int k,
         const unsigned int half_window_size,
         const double dev_factor,
@@ -62,9 +62,9 @@ py::array_t<double, py::array::c_style> pyEpipolarStatisticalOutlierFiltering(
 
 
 py::array_t<double, py::array::c_style> pyEpipolarSmallComponentsOutlierFiltering(
-        py::array_t<double, py::array::c_style | py::array::forcecast>& x_values,
-        py::array_t<double, py::array::c_style | py::array::forcecast>& y_values,
-        py::array_t<double, py::array::c_style | py::array::forcecast>& z_values,
+        py::array_t<double, py::array::c_style>& x_values,
+        py::array_t<double, py::array::c_style>& y_values,
+        py::array_t<double, py::array::c_style>& z_values,
         const unsigned int min_cluster_size = 15,
         const double radius = 10,
         const unsigned int half_window_size = 5,
@@ -89,15 +89,12 @@ py::array_t<double, py::array::c_style> pyEpipolarSmallComponentsOutlierFilterin
 
 
 
-py::list pyPointCloudStatisticalOutlierFiltering(py::array_t<double,
-          py::array::c_style | py::array::forcecast> x_array,
-          py::array_t<double,
-          py::array::c_style | py::array::forcecast> y_array,
-          py::array_t<double,
-          py::array::c_style | py::array::forcecast> z_array,
-          const double dev_factor,
-          const unsigned int k,
-          const bool use_median)
+py::list pyPointCloudStatisticalOutlierFiltering(py::array_t<double, py::array::c_style> x_array,
+                                                 py::array_t<double, py::array::c_style> y_array,
+                                                 py::array_t<double, py::array::c_style> z_array,
+                                                 const double dev_factor,
+                                                 const unsigned int k,
+                                                 const bool use_median)
 {
   /* Request a buffer descriptor from Python */
   py::buffer_info x_info = x_array.request();
@@ -117,15 +114,12 @@ py::list pyPointCloudStatisticalOutlierFiltering(py::array_t<double,
 }
 
 
-py::list pyPointCloudSmallComponentsOutlierFiltering(py::array_t<double,
-          py::array::c_style | py::array::forcecast> x_array,
-          py::array_t<double,
-          py::array::c_style | py::array::forcecast> y_array,
-          py::array_t<double,
-          py::array::c_style | py::array::forcecast> z_array,
-          const double radius = 3,
-          const unsigned int min_cluster_size = 15,
-          const double clusters_distance_threshold = 4)
+py::list pyPointCloudSmallComponentsOutlierFiltering(py::array_t<double, py::array::c_style> x_array,
+                                                     py::array_t<double, py::array::c_style> y_array,
+                                                     py::array_t<double, py::array::c_style> z_array,
+                                                     const double radius = 3,
+                                                     const unsigned int min_cluster_size = 15,
+                                                     const double clusters_distance_threshold = 4)
 {
   /* Request a buffer descriptor from Python */
   py::buffer_info x_info = x_array.request();
@@ -161,7 +155,7 @@ PYBIND11_MODULE(outlier_filter, m)
   m.doc() = "Wrapper module of cars-filter, a c++ module for 3D point filtering";
   m.def("pc_small_components_outlier_filtering",
         &pyPointCloudSmallComponentsOutlierFiltering,
-        "Filter outliers from point cloud using statistical method",
+        "Filter outliers from point cloud using small components method",
         py::arg("x_array"),
         py::arg("y_array"),
         py::arg("z_array"),
@@ -172,7 +166,7 @@ PYBIND11_MODULE(outlier_filter, m)
 
   m.def("pc_statistical_outlier_filtering",
         &pyPointCloudStatisticalOutlierFiltering,
-        "Filter outliers from point cloud using small components method",
+        "Filter outliers from point cloud using statistical method",
         py::arg("x_array"),
         py::arg("y_array"),
         py::arg("z_array"),
@@ -183,7 +177,7 @@ PYBIND11_MODULE(outlier_filter, m)
 
   m.def("epipolar_small_components_outlier_filtering",
         &pyEpipolarSmallComponentsOutlierFiltering,
-        "Filter outliers from depth map in epipolar geometry",
+        "Filter outliers from depth map in epipolar geometry using small components method",
         py::arg("x_values"),
         py::arg("y_values"),
         py::arg("z_values"),
@@ -196,7 +190,7 @@ PYBIND11_MODULE(outlier_filter, m)
 
   m.def("epipolar_statistical_outlier_filtering",
         &pyEpipolarStatisticalOutlierFiltering,
-        "Filter outliers from depth map in epipolar geometry",
+        "Filter outliers from depth map in epipolar geometry using statistical method",
         py::arg("x_values"),
         py::arg("y_values"),
         py::arg("z_values"),
