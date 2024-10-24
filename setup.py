@@ -30,7 +30,13 @@ try:
     ext_modules = [
         Pybind11Extension(
             "outlier_filter",
-            ["cars_filter/filter.cpp", "cars_filter/KDTree.cpp"],
+            [
+                "cars_filter/filter.cpp",
+                "cars_filter/KDTree.cpp",
+                "cars_filter/epipolar_utils.cpp",
+                "cars_filter/small_components_filtering.cpp",
+                "cars_filter/statistical_filtering.cpp",
+            ],
             extra_compile_args=["-O3"],
         ),
     ]
