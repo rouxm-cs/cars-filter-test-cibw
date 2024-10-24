@@ -20,48 +20,84 @@
 """Filter epipolar utility script"""
 
 import argparse
+import datetime
 import sys
 
+import numpy as np
 import pyproj
 import rasterio
 
 import outlier_filter
 
 
-def main(epipolar_x_image, epipolar_y_image, epipolar_z_image):
+def main(**kwargs):
     """
     Filter outliers in epipolar images
     """
 
-    with rasterio.open(epipolar_x_image) as x_ds, rasterio.open(
-        epipolar_y_image
-    ) as y_ds, rasterio.open(epipolar_z_image) as z_ds:
-        print("images opened!!")
+    # Parse common parameters
+    in_epipolar_x_image = kwargs["in_epipolar_x_image"]
+    in_epipolar_y_image = kwargs["in_epipolar_y_image"]
+    in_epipolar_z_image = kwargs["in_epipolar_z_image"]
 
-        print(x_ds)
-        print(y_ds)
-        print(z_ds)
+    outlier_mask = kwargs["out_outliers"]
+    out_epipolar_x_image = kwargs["out_epipolar_x_image"]
+    out_epipolar_y_image = kwargs["out_epipolar_y_image"]
+    out_epipolar_z_image = kwargs["out_epipolar_z_image"]
 
+    epsg = kwargs["epsg"]
+    method = kwargs["method"]
+
+    with rasterio.open(in_epipolar_x_image) as x_ds, rasterio.open(
+        in_epipolar_y_image
+    ) as y_ds, rasterio.open(in_epipolar_z_image) as z_ds:
         x_values = x_ds.read(1)
-        print(x_values.shape)
         y_values = y_ds.read(1)
         z_values = z_ds.read(1)
 
-        print(f"x_values.stride {x_values.strides}")
-
-        # hard code UTM 36N for Gizeh for now
-        transformer = pyproj.Transformer.from_crs(4326, 32636)
+        transformer = pyproj.Transformer.from_crs(4326, epsg)
         # X-Y inversion required because WGS84 is lat first ?
+        # pylint: disable-next=unpacking-non-sequence
         x_utm, y_utm = transformer.transform(x_values, y_values)
 
-        outlier_array = outlier_filter.epipolar_outlier_filtering(
-            x_utm, y_utm, z_values, "statistical_filtering"
-        )
+        start_time = datetime.datetime.now()
+
+        if method == "statistical":
+            outlier_array = (
+                outlier_filter.epipolar_statistical_outlier_filtering(
+                    x_utm,
+                    y_utm,
+                    z_values,
+                    half_window_size=kwargs["statistical.half_window_size"],
+                    k=kwargs["statistical.k"],
+                    dev_factor=kwargs["statistical.dev_factor"],
+                    use_median=kwargs["statistical.use_median"],
+                )
+            )
+        elif method == "small_components":
+            outlier_array = (
+                outlier_filter.epipolar_small_components_outlier_filtering(
+                    x_utm,
+                    y_utm,
+                    z_values,
+                    radius=kwargs["small_components.radius"],
+                    min_cluster_size=kwargs[
+                        "small_components.min_cluster_size"
+                    ],
+                    half_window_size=kwargs[
+                        "small_components.half_window_size"
+                    ],
+                    clusters_distance_threshold=kwargs[
+                        "small_components.clusters_distance_threshold"
+                    ],
+                )
+            )
+
+        end_time = datetime.datetime.now()
+        filtering_duration = end_time - start_time
+        print(f"Filtering duration: {filtering_duration}")
+
         profile_uint = x_ds.profile
-
-        print(outlier_array)
-
-        print(profile_uint)
 
         profile_uint.update(
             dtype=rasterio.uint16,
@@ -70,30 +106,73 @@ def main(epipolar_x_image, epipolar_y_image, epipolar_z_image):
             transform=None,
             compress="lzw",
         )
-        with rasterio.open("example.tif", "w", **profile_uint) as dst:
+        with rasterio.open(outlier_mask, "w", **profile_uint) as dst:
             dst.write(outlier_array.astype(rasterio.uint16), 1)
 
         profile_float = x_ds.profile
 
         profile_float.update(count=1, transform=None, compress="lzw")
-        print(x_values.shape)
 
-        with rasterio.open("x_filtered.tif", "w", **profile_float) as dst:
+        with rasterio.open(out_epipolar_x_image, "w", **profile_float) as dst:
             dst.write(x_utm, 1)
-        with rasterio.open("y_filtered.tif", "w", **profile_float) as dst:
+        with rasterio.open(out_epipolar_y_image, "w", **profile_float) as dst:
             dst.write(y_utm, 1)
-        with rasterio.open("z_filtered.tif", "w", **profile_float) as dst:
+        with rasterio.open(out_epipolar_z_image, "w", **profile_float) as dst:
             dst.write(z_values, 1)
 
 
 def console_script():
-    """Console script for filterlaz."""
+    """Console script for filter_epipolar."""
     parser = argparse.ArgumentParser()
-    parser.add_argument("epipolar_x_image")
-    parser.add_argument("epipolar_y_image")
-    parser.add_argument("epipolar_z_image")
+
+    # Common parameters
+    parser.add_argument("in_epipolar_x_image")
+    parser.add_argument("in_epipolar_y_image")
+    parser.add_argument("in_epipolar_z_image")
+    parser.add_argument("out_outliers")
+    parser.add_argument("out_epipolar_x_image")
+    parser.add_argument("out_epipolar_y_image")
+    parser.add_argument("out_epipolar_z_image")
+    parser.add_argument("epsg", type=int)
+
+    subparsers = parser.add_subparsers(help="filtering method", dest="method")
+
+    statistical_parser = subparsers.add_parser("statistical")
+    small_components_parser = subparsers.add_parser("small_components")
+
+    # Statistical filtering parameters
+    statistical_parser.add_argument(
+        "statistical.half_window_size", nargs="?", type=int, default=5
+    )
+    statistical_parser.add_argument(
+        "statistical.k", nargs="?", type=int, default=50
+    )
+    statistical_parser.add_argument(
+        "statistical.dev_factor", nargs="?", type=float, default=1
+    )
+    statistical_parser.add_argument(
+        "statistical.use_median", nargs="?", type=bool, default=False
+    )
+
+    # Small components parameters
+    small_components_parser.add_argument(
+        "small_components.half_window_size", nargs="?", type=int, default=5
+    )
+    small_components_parser.add_argument(
+        "small_components.radius", nargs="?", type=float, default=3.0
+    )
+    small_components_parser.add_argument(
+        "small_components.min_cluster_size", nargs="?", type=int, default=15
+    )
+    small_components_parser.add_argument(
+        "small_components.clusters_distance_threshold",
+        nargs="?",
+        type=float,
+        default=np.nan,
+    )
+
     args = parser.parse_args()
-    main(args.epipolar_x_image, args.epipolar_y_image, args.epipolar_z_image)
+    main(**vars(args))
 
 
 if __name__ == "__main__":
