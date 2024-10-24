@@ -23,6 +23,19 @@
 namespace cars_filter
 {
 
+/*
+*
+* \brief Filter a point cloud using the statistical method
+*
+* \param x_coords array containing the x triangulated coordinates
+* \param y_coords array containing the y triangulated coordinates
+* \param z_coords array containing the altitudes
+* \param num_elem number of points in the cloud
+* \param dev_factor ratio applied to stddev or interquartile distance in distance threshold
+* \param k number of neighbors in the KNN algorithm
+* \param use_median Use median+interquartile distance (true) or mean+stddev (false) to compute distance threshold
+*
+*/
 std::vector<unsigned int> statistical_filtering(double* x_coords,
                                                 double* y_coords,
                                                 double* z_coords,
@@ -31,6 +44,20 @@ std::vector<unsigned int> statistical_filtering(double* x_coords,
                                                 const unsigned int k = 50,
                                                 const bool use_median = false);
 
+/*
+*
+* \brief Filter an epipolar depth map using the statistical method
+*
+* \param x_coords Image in epipolar geometry containing the x triangulated coordinates
+* \param y_coords Image in epipolar geometry containing the y triangulated coordinates
+* \param z_coords Image in epipolar geometry containing the z triangulated coordinates
+* \param outlier_array output outlier mask (true = outlier)
+* \param k number of neighbors in the KNN algorithm
+* \param half window size half size of the epipolar search window (in rows and columns)
+* \param dev_factor ratio applied to stddev or interquartile distance in distance threshold
+* \param use_median Use median+interquartile distance (true) or mean+stddev (false) to compute distance threshold
+*
+*/
 void epipolar_statistical_filtering(Image<double>& x_coords,
                                     Image<double>& y_coords,
                                     Image<double>& z_coords,
