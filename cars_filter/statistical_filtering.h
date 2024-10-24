@@ -137,7 +137,6 @@ std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
 
     dist_thresh = mean + dev_factor * stddev;
   }
-  std::cout << "dist_thresh " << dist_thresh << std::endl;
 
   std::vector<unsigned int> result;
 
@@ -229,7 +228,6 @@ void epipolar_statistical_filtering(Image<double>& x_coords,
 
     distance_threshold = mean + dev_factor * stddev;
   }
-  std::cout << "distance_threshold " << distance_threshold << std::endl;
 
   for (unsigned int row=0; row < x_coords.number_of_rows(); row++)
   {

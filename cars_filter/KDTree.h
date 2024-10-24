@@ -23,11 +23,6 @@
 #include <algorithm>
 #include <stack>
 
-// Debug headers
-#include <chrono>
-#include <iostream>
-#include <iomanip>
-
 namespace cars_filter
 {
 
@@ -226,7 +221,6 @@ private:
 
     if (number_of_points <= m_leaf_size)
     {
-      //std::cout << "creating leaf node" << std::endl;
       KDNode node(*start_idx_it, current_dimension);
 
       node.m_indices.reserve(number_of_points);

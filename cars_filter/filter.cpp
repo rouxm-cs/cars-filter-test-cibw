@@ -127,7 +127,6 @@ py::list pyPointCloudSmallComponentsOutlierFiltering(py::array_t<double,
           const unsigned int min_cluster_size = 15,
           const double clusters_distance_threshold = 4)
 {
-  std::cout << radius << " " << min_cluster_size << std::endl;
   /* Request a buffer descriptor from Python */
   py::buffer_info x_info = x_array.request();
   auto x_coords = static_cast<double *>(x_info.ptr);

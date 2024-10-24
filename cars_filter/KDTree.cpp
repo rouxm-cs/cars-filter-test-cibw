@@ -273,7 +273,6 @@ void KDTree::processLeaf(double x,
     // check if current node is a better match
     auto current_distance = squared_euclidian_distance(x, y, z, 
                                       m_x[*idx_it], m_y[*idx_it], m_z[*idx_it]);
-    //std::cout << current_distance << " ";
     if (current_distance < best_distance)
     {
       // remove the worst neighbor from the list
@@ -304,7 +303,6 @@ void KDTree::processLeafBall(const PointType& point, KDNode* node, std::vector<u
     // check if current node is in the ball around the point
     if (squared_euclidian_distance(point, node_point) <= squared_radius)
     {
-      //std::cout << squared_euclidian_distance(point, node_point) << " " << *idx_it << " " << squared_radius << std::endl;
       neighbors.push_back(*idx_it);
     }
 
@@ -313,19 +311,11 @@ void KDTree::processLeafBall(const PointType& point, KDNode* node, std::vector<u
 
 KDNode* KDTree::build_tree()
 {
-  std::chrono::steady_clock::time_point begin_time = std::chrono::steady_clock::now();
-
   auto indexes = std::vector<unsigned int>(m_point_cloud.size());
   std::iota(indexes.begin(), indexes.end(), 0);
 
   // First split to find the root node
   KDNode* root_node = grow_tree(indexes.begin(), indexes.size(), 0, nullptr);
-
-  std::chrono::steady_clock::time_point end_time = std::chrono::steady_clock::now();
-  std::cout << "root node " << root_node->m_idx << std::endl;
-  // TODO Debug info
-  std::cout << "Tree build time" << std::chrono::duration_cast<std::chrono::milliseconds>(end_time - begin_time).count() << "ms" << std::endl;
-  std::cout << "number of nodes " << m_nodes.size() << std::endl;
 
   return root_node;
 }
