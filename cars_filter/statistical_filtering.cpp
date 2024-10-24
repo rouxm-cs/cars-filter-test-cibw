@@ -37,9 +37,9 @@ std::vector<unsigned int> statistical_filtering(double* x_coords,
     // Leaf Node case
     if (node.m_indices.empty())
     {
-      auto k_neighbors = tree.findKNNIterative(input_point_cloud.m_x[node.m_idx],
-                                               input_point_cloud.m_y[node.m_idx],
-                                               input_point_cloud.m_z[node.m_idx],
+      auto k_neighbors = tree.findKNNIterative(input_point_cloud.m_coords[0][node.m_idx],
+                                               input_point_cloud.m_coords[1][node.m_idx],
+                                               input_point_cloud.m_coords[2][node.m_idx],
                                                k+1,
                                                &node);
       double acc =0;
@@ -54,9 +54,9 @@ std::vector<unsigned int> statistical_filtering(double* x_coords,
       for (auto idx: node.m_indices)
       {
         //const PointType point = {input_point_cloud.m_x[idx], input_point_cloud.m_y[idx], input_point_cloud.m_z[idx]};
-        auto k_neighbors = tree.findKNNIterative(input_point_cloud.m_x[idx],
-                                                 input_point_cloud.m_y[idx],
-                                                 input_point_cloud.m_z[idx],
+        auto k_neighbors = tree.findKNNIterative(input_point_cloud.m_coords[0][idx],
+                                                 input_point_cloud.m_coords[1][idx],
+                                                 input_point_cloud.m_coords[2][idx],
                                                  k+1,
                                                  &node);
         double acc =0;

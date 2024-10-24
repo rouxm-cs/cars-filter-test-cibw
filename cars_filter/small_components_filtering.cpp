@@ -60,9 +60,9 @@ std::vector<unsigned int> point_cloud_small_components_filtering(
       }
 
       // Get the neighbors of the point
-      auto neighbor_list = tree.neighbors_in_ball(input_point_cloud.m_x[idx], 
-                     input_point_cloud.m_y[idx],
-                     input_point_cloud.m_z[idx],
+      auto neighbor_list = tree.neighbors_in_ball(input_point_cloud.m_coords[0][idx], 
+                     input_point_cloud.m_coords[1][idx],
+                     input_point_cloud.m_coords[2][idx],
                      radius);
 
       // Add the neighbors to the current cluster
@@ -79,9 +79,9 @@ std::vector<unsigned int> point_cloud_small_components_filtering(
         neighbor_list.pop_back();
 
         // visited_points[current_idx] = true;
-        auto new_neighbors = tree.neighbors_in_ball(input_point_cloud.m_x[current_idx], 
-                     input_point_cloud.m_y[current_idx],
-                     input_point_cloud.m_z[current_idx],
+        auto new_neighbors = tree.neighbors_in_ball(input_point_cloud.m_coords[0][current_idx], 
+                     input_point_cloud.m_coords[1][current_idx],
+                     input_point_cloud.m_coords[2][current_idx],
                      radius);
 
         for (auto elem: new_neighbors)
@@ -118,9 +118,9 @@ std::vector<unsigned int> point_cloud_small_components_filtering(
             // This have not been implemented because only a few points should 
             // be processed here, in comparison to the full algorithm and 
             // therefore should not be that imapctful.
-            auto new_neighbors = tree.neighbors_in_ball(input_point_cloud.m_x[*current_idx_it],
-                                                        input_point_cloud.m_y[*current_idx_it],
-                                                        input_point_cloud.m_z[*current_idx_it],
+            auto new_neighbors = tree.neighbors_in_ball(input_point_cloud.m_coords[0][*current_idx_it],
+                                                        input_point_cloud.m_coords[1][*current_idx_it],
+                                                        input_point_cloud.m_coords[2][*current_idx_it],
                                                         clusters_distance_threshold);
             
             // Check neighbors of current point and check the set to know if a 

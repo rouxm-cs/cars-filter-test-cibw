@@ -18,38 +18,10 @@
 
 #include "image.h"
 
-// points and distances
-#include "KDTree.h"
+#include "utils.h"
 
 namespace cars_filter
 {
-
-/*
-* Check if a point is NaN
-* 
-* \param point Input point
-* \return true if any coordinate of the point is nan
-*
-*/
-inline bool isnan(const PointType& point)
-{
-  return std::isnan(point[0]) || std::isnan(point[1]) || std::isnan(point[2]);
-}
-
-inline double squared_euclidian_distance(double x1, double y1, double z1, double x2, double y2, double z2)
-{
-  return (x1-x2)*(x1-x2) + (y1-y2)*(y1-y2) + (z1-z2)*(z1-z2); 
-}
-
-inline double squared_euclidian_distance(const PointType& point1, const PointType& point2) 
-{
-  return squared_euclidian_distance(point1[0],
-                            point1[1],
-                            point1[2],
-                            point2[0],
-                            point2[1],
-                            point2[2]);
-}
 
 /*
 * Find neighbors of point, in the sense of the euclian distance, inside a search

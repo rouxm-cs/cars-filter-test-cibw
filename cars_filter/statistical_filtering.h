@@ -23,43 +23,6 @@
 namespace cars_filter
 {
 
-/*
-*
-* \brief Compute first quartile, median and third quartile of input vector
-* 
-* This function returns the closest element (rounded down) to the quantile.
-* For example the median of a vector of 30 elements is the 15th element,
-* not the mean between the 15th and 16th.
-* 
-* Note: the vector is copied because nth_element modifies the input container
-*/
-template<typename T>
-std::tuple<T, T, T> compute_approximate_quantiles(std::vector<T> input_data)
-{
-  unsigned int size = input_data.size();
-  unsigned int first_quarter_pos = static_cast<unsigned int>(size/4);
-  unsigned int half_pos = static_cast<unsigned int>(size/2);
-  unsigned int third_quarter_pos = first_quarter_pos + half_pos;
-
-  // Split the container at the median
-  std::nth_element(input_data.begin(),
-                   input_data.begin() + half_pos,
-                   input_data.end());
-
-  // Split the first half of the container at the 0.25 quantile
-  std::nth_element(input_data.begin(),
-                   input_data.begin() + first_quarter_pos,
-                   input_data.begin() + half_pos);
-
-  // Split the other half of the container at the 0.75 quantile
-  std::nth_element(input_data.begin() + half_pos+1,
-                   input_data.begin() + third_quarter_pos,
-                   input_data.end());
-
-  return {input_data[first_quarter_pos], input_data[half_pos], input_data[third_quarter_pos]};
-}
-
-
 std::vector<unsigned int> statistical_filtering(double* x_coords,
                                                 double* y_coords,
                                                 double* z_coords,

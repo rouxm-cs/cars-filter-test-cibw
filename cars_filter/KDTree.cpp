@@ -16,6 +16,8 @@
 
 #include "KDTree.h"
 
+#include "utils.h"
+
 namespace cars_filter
 {
 
@@ -53,7 +55,7 @@ std::vector<unsigned int> KDTree::neighbors_in_ball(double x,
       bool is_left = point[current_dimension] < m_point_cloud.m_coords[current_dimension][current_idx];
       KDNode* next_node = is_left ? current_node->m_left_child : current_node->m_right_child;
 
-      if (squared_euclidian_distance(point, *current_node) < squared_radius)
+      if (squared_euclidian_distance_in_tree(point, *current_node) < squared_radius)
       {
         neighbors.push_back(current_node->m_idx);
       }
@@ -109,7 +111,7 @@ std::vector<NeighborNode> KDTree::findKNNIterative(double x,
       const auto current_dimension = current_node->m_dimension;
 
       // check if current node is a better match
-      auto current_distance = squared_euclidian_distance(x, y, z, current_node->m_idx);
+      auto current_distance = squared_euclidian_distance_in_tree(x, y, z, current_node->m_idx);
 
       if (current_distance < best_distance)
       {
@@ -153,7 +155,7 @@ std::vector<NeighborNode> KDTree::findKNNIterative(double x,
       const auto current_dimension = current_node->m_dimension;
 
       // check if current node is a better match
-      auto current_distance = squared_euclidian_distance(x, y, z, current_node->m_idx);
+      auto current_distance = squared_euclidian_distance_in_tree(x, y, z, current_node->m_idx);
 
       if (current_distance < best_distance)
       {
@@ -222,7 +224,7 @@ std::vector<NeighborNode> KDTree::findKNNIterative(double x,
       const auto current_dimension = current_node->m_dimension;
 
       // check if current node is a better match
-      auto current_distance = squared_euclidian_distance(x, y, z, current_node->m_idx);
+      auto current_distance = squared_euclidian_distance_in_tree(x, y, z, current_node->m_idx);
 
       if (current_distance < best_distance)
       {

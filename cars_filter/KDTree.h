@@ -16,29 +16,30 @@
 
 #pragma once
 
-#include <array>
 #include <queue>
-#include <cmath>
-#include <numeric>
-#include <algorithm>
 #include <stack>
+
+#include "utils.h"
 
 namespace cars_filter
 {
 
-using PointType = std::array<double, 3>;
-
+// Point cloud abstraction (does not own any data)
 class PointCloud
 {
 public:
-  double* m_x;
-  double* m_y;
-  double* m_z;
+  // x, y and z array pointer
+  // double* m_x;
+  // double* m_y;
+  // double* m_z;
 
+  // Number of points in the point cloud
   unsigned int m_num_elem;
 
+  // x,y,z arrays as an array of array, used to fetch data of an integer dimension 
   std::array<double*, 3> m_coords;
 
+  // number of element getter
   unsigned int size() const
   {
     return m_num_elem;
@@ -46,32 +47,43 @@ public:
 
   // Constructor from buffers
   PointCloud(double* x_coords, double* y_coords, double* z_coords, unsigned int num_elem)
-    : m_x(x_coords), m_y(y_coords), m_z(z_coords), m_num_elem(num_elem), m_coords({m_x, m_y, m_z})
+    : m_num_elem(num_elem), m_coords({x_coords, y_coords, z_coords})
   {
   }
 
 };
 
 
-
+// A node in the KDTree
 class KDNode
 {
 public:
+  // Index of the node
   unsigned int m_idx;
-  // TODO: is that required in NN, or can we deduce it automatically
+
+  // Cut dimension of the node
   unsigned int m_dimension;
 
+  // Leaf node special case: store a list of indices for brute force computation
   std::vector<unsigned int> m_indices;
 
+  // Left children node in the tree
   KDNode* m_left_child;
+  // Right children node in the tree
   KDNode* m_right_child;
+  // Parent node
   KDNode* m_parent;
 
-  KDNode(unsigned int idx, unsigned int dimension): m_idx(idx), m_dimension(dimension), m_left_child(nullptr), m_right_child(nullptr), m_parent(nullptr)
+  KDNode(unsigned int idx, unsigned int dimension): m_idx(idx),
+                                                    m_dimension(dimension),
+                                                    m_left_child(nullptr),
+                                                    m_right_child(nullptr), 
+                                                    m_parent(nullptr)
   {
   };
 };
 
+// Structure containing a node and a distance used internally in KNN computations
 struct NeighborNode
 {
   KDNode* node;
@@ -96,6 +108,8 @@ inline bool operator> (const NeighborNode& lhs, const NeighborNode& rhs)
   return lhs.distance > rhs.distance;
 }
 
+// Trick to give access to the internal vector of the priority queue, without
+// having to pop the elements one by one
 template <class Container>
 class Adapter : public Container {
 public:
@@ -132,35 +146,8 @@ public:
     m_z = m_point_cloud.m_coords[2];
   }
 
-  inline double squared_euclidian_distance(const double x1, const double y1, const double z1, const double x2, const double y2, const double z2) const
-  {
-    const double dx = x1-x2;
-    const double dy = y1-y2;
-    const double dz = z1-z2;
-    return dx * dx + dy * dy + dz * dz; 
-  }
-
-  inline double squared_euclidian_distance(double x, double y, double z, KDNode& node) const
-  {
-    return squared_euclidian_distance(x,
-                              y,
-                              z,
-                              m_point_cloud.m_coords[0][node.m_idx],
-                              m_point_cloud.m_coords[1][node.m_idx],
-                              m_point_cloud.m_coords[2][node.m_idx]);
-  }
-
-  inline double squared_euclidian_distance(const PointType& point1, const PointType& point2) const
-  {
-    return squared_euclidian_distance(point1[0],
-                              point1[1],
-                              point1[2],
-                              point2[0],
-                              point2[1],
-                              point2[2]);
-  }
-
-  inline double squared_euclidian_distance(const PointType& point, const KDNode& node) const
+  // Euclidian distance functions between point and tree node
+  inline double squared_euclidian_distance_in_tree(const PointType& point, const KDNode& node) const
   {
     const double dx = point[0] - m_x[node.m_idx];
     const double dy = point[1] - m_y[node.m_idx];
@@ -169,17 +156,7 @@ public:
     return dx * dx + dy * dy + dz * dz;
   }
 
-  inline double squared_euclidian_distance(const PointType& point, const unsigned int idx) const
-  {
-    const double dx = point[0] - m_x[idx];
-    const double dy = point[1] - m_y[idx];
-    const double dz = point[2] - m_z[idx];
-
-    return dx * dx + dy * dy + dz * dz;
-  }
-
-
-  inline double squared_euclidian_distance(double x, double y, double z, const unsigned int idx) const
+  inline double squared_euclidian_distance_in_tree(double x, double y, double z, const unsigned int idx) const
   {
     const double dx = x - m_x[idx];
     const double dy = y - m_y[idx];
@@ -188,25 +165,30 @@ public:
     return dx * dx + dy * dy + dz * dz;
   }
 
+  // getter on the internal nodes
   std::vector<KDNode>& getNodes()
   {
     return m_nodes;
   }
 
-
-  void processLeaf(double x, double y, double z, KDNode* node, double& best_distance, KNeighborList& k_nearest_neighbors, const unsigned int k=1);
-
-  void processLeafBall(const PointType& point, KDNode* node, std::vector<unsigned int>& neighbors, double squared_radius);
-
+  // Find all neighbors of point (x,y,z) in given radius
   std::vector<unsigned int> neighbors_in_ball(double x, double y, double z, double radius);
 
+  // Find k nearest neighbor nodes of point (x,y,z)
   std::vector<NeighborNode> findKNNIterative(double x, double y, double z, unsigned int k=1, KDNode* starting_node= nullptr);
-
 
 private:
 
+  // Brute force KNN distance computation on a multi-point leaf node
+  void processLeaf(double x, double y, double z, KDNode* node, double& best_distance, KNeighborList& k_nearest_neighbors, const unsigned int k=1);
+
+  // Brute force radius distance computation on a multi-point leaf node
+  void processLeafBall(const PointType& point, KDNode* node, std::vector<unsigned int>& neighbors, double squared_radius);
+
+  // Initial function building the KDTree, calls grow_tree recursively and return root node of the tree
   KDNode* build_tree();
 
+  // Recursive function to add node to a KDTree, until the whole point cloud has been added.
   template <typename iterator_type>
   KDNode* grow_tree(iterator_type start_idx_it,
                     unsigned int number_of_points,
@@ -235,8 +217,8 @@ private:
       return &m_nodes.back();
     }
 
+    // Median computation
     auto median_pos= static_cast<unsigned int>(number_of_points/2);
-
     std::nth_element(start_idx_it,
                      start_idx_it+median_pos,
                      start_idx_it+number_of_points,
@@ -255,7 +237,6 @@ private:
 
     return node_ptr;
   }
-
 
 inline double compute_axis_distance(const unsigned int dimension, const double x, const double y, const double z, const unsigned int idx)
 {
