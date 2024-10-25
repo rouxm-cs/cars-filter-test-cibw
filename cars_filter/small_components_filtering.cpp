@@ -205,7 +205,10 @@ void epipolar_small_components_filtering(
         {
           for (const auto& [elem_row, elem_col]:current_cluster)
           {
-            outlier_array.get(elem_row, elem_col) = current_cluster.size();
+            outlier_array.get(elem_row, elem_col) = 1;
+            x_coords.get(elem_row, elem_col) = std::numeric_limits<double>::quiet_NaN();
+            y_coords.get(elem_row, elem_col) = std::numeric_limits<double>::quiet_NaN();
+            z_coords.get(elem_row, elem_col) = std::numeric_limits<double>::quiet_NaN();
           }
         }
         else
@@ -232,7 +235,10 @@ void epipolar_small_components_filtering(
           {
             for (const auto& [elem_row, elem_col]:current_cluster)
             {
-              outlier_array.get(elem_row, elem_col) = current_cluster.size();
+              outlier_array.get(elem_row, elem_col) = 1;
+              x_coords.get(elem_row, elem_col) = std::numeric_limits<double>::quiet_NaN();
+              y_coords.get(elem_row, elem_col) = std::numeric_limits<double>::quiet_NaN();
+              z_coords.get(elem_row, elem_col) = std::numeric_limits<double>::quiet_NaN();
             }
           }
         }

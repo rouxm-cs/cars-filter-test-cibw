@@ -192,7 +192,7 @@ void epipolar_statistical_filtering(Image<double>& x_coords,
       {
         outlier_array.get(row, col) = true;
         x_coords.get(row, col) = std::numeric_limits<double>::quiet_NaN();
-        z_coords.get(row, col) = std::numeric_limits<double>::quiet_NaN();
+        y_coords.get(row, col) = std::numeric_limits<double>::quiet_NaN();
         z_coords.get(row, col) = std::numeric_limits<double>::quiet_NaN();
       }
     }

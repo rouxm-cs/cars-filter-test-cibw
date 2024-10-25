@@ -28,11 +28,6 @@ namespace cars_filter
 class PointCloud
 {
 public:
-  // x, y and z array pointer
-  // double* m_x;
-  // double* m_y;
-  // double* m_z;
-
   // Number of points in the point cloud
   unsigned int m_num_elem;
 
