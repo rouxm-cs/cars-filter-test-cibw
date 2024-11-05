@@ -162,6 +162,15 @@ void epipolar_small_components_filtering(
 
   std::vector<std::pair<unsigned int, unsigned int>> clusters;
 
+  // outlier_array initialization
+  for (unsigned int row=0; row < x_coords.number_of_rows(); row++)
+  {
+    for (unsigned int col=0; col < x_coords.number_of_cols(); col++)
+    {
+      outlier_array.get(row, col) = false;
+    }
+  }
+
   for (unsigned int row=0; row < x_coords.number_of_rows(); row++)
   {
     for (unsigned int col=0; col < x_coords.number_of_cols(); col++)
