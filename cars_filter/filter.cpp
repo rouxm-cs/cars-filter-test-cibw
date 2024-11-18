@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "small_components_filtering.h"
+#include "small_component_filtering.h"
 #include "statistical_filtering.h"
 #include "image.h"
 
@@ -61,7 +61,7 @@ py::array_t<double, py::array::c_style> pyEpipolarStatisticalOutlierFiltering(
 
 
 
-py::array_t<double, py::array::c_style> pyEpipolarSmallComponentsOutlierFiltering(
+py::array_t<double, py::array::c_style> pyEpipolarSmallComponentOutlierFiltering(
         py::array_t<double, py::array::c_style>& x_values,
         py::array_t<double, py::array::c_style>& y_values,
         py::array_t<double, py::array::c_style>& z_values,
@@ -81,7 +81,7 @@ py::array_t<double, py::array::c_style> pyEpipolarSmallComponentsOutlierFilterin
                                                         {x_image.number_of_cols() * sizeof(double),  sizeof(double)});
   auto outlier_image = pyarray_to_image<double>(outlier_array);
 
-  epipolar_small_components_filtering(x_image, y_image, z_image, outlier_image, min_cluster_size, radius, half_window_size, clusters_distance_threshold);
+  epipolar_small_component_filtering(x_image, y_image, z_image, outlier_image, min_cluster_size, radius, half_window_size, clusters_distance_threshold);
 
   return outlier_array;
 }
@@ -114,7 +114,7 @@ py::list pyPointCloudStatisticalOutlierFiltering(py::array_t<double, py::array::
 }
 
 
-py::list pyPointCloudSmallComponentsOutlierFiltering(py::array_t<double, py::array::c_style> x_array,
+py::list pyPointCloudSmallComponentOutlierFiltering(py::array_t<double, py::array::c_style> x_array,
                                                      py::array_t<double, py::array::c_style> y_array,
                                                      py::array_t<double, py::array::c_style> z_array,
                                                      const double radius = 3,
@@ -131,7 +131,7 @@ py::list pyPointCloudSmallComponentsOutlierFiltering(py::array_t<double, py::arr
   py::buffer_info z_info = z_array.request();
   auto z_coords = static_cast<double *>(z_info.ptr);
 
-  auto result = cars_filter::point_cloud_small_components_filtering(
+  auto result = cars_filter::point_cloud_small_component_filtering(
                                         x_coords,
                                         y_coords,
                                         z_coords,
@@ -153,8 +153,8 @@ py::list pyPointCloudSmallComponentsOutlierFiltering(py::array_t<double, py::arr
 PYBIND11_MODULE(outlier_filter, m)
 {
   m.doc() = "Wrapper module of cars-filter, a c++ module for 3D point filtering";
-  m.def("pc_small_components_outlier_filtering",
-        &pyPointCloudSmallComponentsOutlierFiltering,
+  m.def("pc_small_component_outlier_filtering",
+        &pyPointCloudSmallComponentOutlierFiltering,
         "Filter outliers from point cloud using small components method",
         py::arg("x_array"),
         py::arg("y_array"),
@@ -175,8 +175,8 @@ PYBIND11_MODULE(outlier_filter, m)
         py::arg("use_median") = false
   );
 
-  m.def("epipolar_small_components_outlier_filtering",
-        &pyEpipolarSmallComponentsOutlierFiltering,
+  m.def("epipolar_small_component_outlier_filtering",
+        &pyEpipolarSmallComponentOutlierFiltering,
         "Filter outliers from depth map in epipolar geometry using small components method",
         py::arg("x_values"),
         py::arg("y_values"),

@@ -14,13 +14,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "small_components_filtering.h"
+#include "small_component_filtering.h"
 #include <unordered_set>
 
 namespace cars_filter
 {
 
-std::vector<unsigned int> point_cloud_small_components_filtering(
+std::vector<unsigned int> point_cloud_small_component_filtering(
     double* x_coords,
     double* y_coords,
     double* z_coords,
@@ -148,7 +148,7 @@ std::vector<unsigned int> point_cloud_small_components_filtering(
   return result;
 }
 
-void epipolar_small_components_filtering(
+void epipolar_small_component_filtering(
     Image<double>& x_coords,
     Image<double>& y_coords,
     Image<double>& z_coords,

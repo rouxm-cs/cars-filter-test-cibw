@@ -37,7 +37,7 @@ namespace cars_filter
 * \param clusters_distance_threshold a cluster will not be removed if it has a neighbor within this distance
 *
 */
-std::vector<unsigned int> point_cloud_small_components_filtering(
+std::vector<unsigned int> point_cloud_small_component_filtering(
     double* x_coords,
     double* y_coords,
     double* z_coords,
@@ -50,7 +50,7 @@ std::vector<unsigned int> point_cloud_small_components_filtering(
 
 /*
 *
-* \brief Filter an epipolar depth map using the small components method
+* \brief Filter an epipolar depth map using the small component method
 *
 * \param x_coords Image in epipolar geometry containing the x triangulated coordinates
 * \param y_coords Image in epipolar geometry containing the y triangulated coordinates
@@ -62,7 +62,7 @@ std::vector<unsigned int> point_cloud_small_components_filtering(
 * \param clusters_distance_threshold a cluster will not be removed if it has a neighbor within this distance
 *
 */
-void epipolar_small_components_filtering(
+void epipolar_small_component_filtering(
     Image<double>& x_coords,
     Image<double>& y_coords,
     Image<double>& z_coords,
