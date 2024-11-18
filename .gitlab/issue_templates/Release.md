@@ -1,4 +1,4 @@
-Release  cars-rasterize  <numero_version>
+Release  cars-filter  <numero_version>
 
 /label ~"Kind - Release"
 

@@ -12,7 +12,7 @@ Préconisations générales:
 ### Contexte
 (ce qui permet de rejouer le bug)
 
-- Version utilisée ( cars-rasterize --version): 
+- Version utilisée : 
 
 - Contexte d'utilisation :
 

@@ -1,4 +1,4 @@
-* cars-rasterize version:
+* cars-filter version:
 * Python version:
 * Operating System:
 
