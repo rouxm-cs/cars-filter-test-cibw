@@ -47,7 +47,7 @@ Classical workflow is :
 
 # Contribution license agreement
 
-cars-resample requires that contributors sign out a [Contributor License
+cars-filter requires that contributors sign out a [Contributor License
 Agreement](https://en.wikipedia.org/wiki/Contributor_License_Agreement). The
 purpose of this CLA is to ensure that the project has the necessary ownership or
 grants of rights over all contributions to allow them to distribute under the
