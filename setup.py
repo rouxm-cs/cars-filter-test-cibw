@@ -3,7 +3,7 @@
 #
 # Copyright (C) 2024 Centre National d'Etudes Spatiales (CNES).
 #
-# This file is part of cars-resample
+# This file is part of cars-filter
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
