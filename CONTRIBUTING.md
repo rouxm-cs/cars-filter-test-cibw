@@ -12,7 +12,7 @@ helps, and credit will always be given.
 
 # Bug report
 
-Any proven or suspected malfunction should be traced in a bug report, the latter being an issue in the cars-resample repository.
+Any proven or suspected malfunction should be traced in a bug report, the latter being an issue in the cars-filter repository.
 
 **Don't hesitate to do so: It is best to open a bug report and quickly resolve it than to let a problem remains in the project.**
 **Notifying the potential bugs is the first way for contributing to a software.**
